@@ -1,0 +1,5 @@
+sweep:
+  - param: f
+    range: [1e6, 10e6]
+    points: 10
+    scale: "linear"
