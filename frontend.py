@@ -44,8 +44,7 @@ class StateManager:
         self.simulation_progress = 0.0
         self.simulation_results = None
         self.logs = []
-        # For each plot tab, store its type, a unique tab tag, and a list of trace expressions.
-        self.plot_tabs = {}
+        self.plot_tabs = {}  # plot_id -> {type, traces, tab_tag, name}
         self._last_netlist_hash = None
         self._last_sweep_hash = None
         self.yaml_editor_text = ""
@@ -63,6 +62,13 @@ class StateManager:
             self._last_sweep_hash = sweep_hash
             return True
         return False
+
+    def set_plot_name(self, plot_id, new_name):
+        if plot_id in self.plot_tabs:
+            self.plot_tabs[plot_id]["name"] = new_name
+            dpg.set_item_label(self.plot_tabs[plot_id]["tab_tag"], new_name)
+            self.add_log(f"Renamed plot {plot_id} to '{new_name}'")
+
 
 state = StateManager()
 
@@ -102,6 +108,17 @@ def _evaluate_complex_expression(expr):
             state.add_log(f"Complex eval failed at {freq:.3e} Hz: {e}")
             return None, None
     return x_data, y_data
+
+# ---------- To be sorted -------
+
+def rename_plot_callback(sender, app_data, user_data):
+    plot_id = user_data
+    new_name = app_data.strip()
+    if new_name:
+        state.set_plot_name(plot_id, new_name)
+    else:
+        state.add_log("Plot name cannot be empty.")
+
 
 # ---------- Global Smith Chart Constants & Grid Generators ----------
 CIRCLE_RES = 500
@@ -213,56 +230,85 @@ def remove_trace_callback(sender, app_data, user_data):
     _update_trace_list(plot_id)
 
 # ---------- Plot Tab Management ----------
+def create_trace_list_container(plot_id, parent, height=120):
+    """Creates a consistent trace list container with fixed height and autosizing X."""
+    with dpg.child_window(tag=f"trace_list_{plot_id}", parent=parent, autosize_x=True, height=height):
+        pass
+
 def add_new_plot_tab(plot_type, initial_expression=None):
-    # Create a unique plot id.
     plot_id = str(int(time.time() * 1000))
     tab_tag = f"tab_{plot_id}"
-    if plot_type.lower() == "rectangular":
-        with dpg.tab(label="Rectangular Plot", tag=tab_tag, parent="results_tab_bar"):
-            # Input for new trace.
+
+    plot_name = "Rectangular Plot" if plot_type.lower() == "rectangular" else "Smith Chart"
+
+    with dpg.tab(label=plot_name, tag=tab_tag, parent="results_tab_bar"):
+        # --- Rename input ---
+        dpg.add_input_text(
+            label="Plot Name",
+            default_value=plot_name,
+            user_data=plot_id,
+            callback=rename_plot_callback,
+            tag=f"plot_name_input_{plot_id}",
+            width=250
+        )
+
+        if plot_type.lower() == "rectangular":
+            # Trace input
             input_tag = f"expression_input_{plot_id}"
             dpg.add_input_text(label="Plot Expression", default_value="abs(z_to_s(Z)[1, 0])", tag=input_tag, width=300)
             dpg.add_button(label="Add Trace", user_data=plot_id, callback=plot_expression_callback)
-            # Container for the trace list placed above the plot.
-            with dpg.child_window(label="Trace List", tag=f"trace_list_{plot_id}", autosize_x=False, autosize_y=False):
-                pass
-            # Plot widget.
+
+            create_trace_list_container(plot_id, parent=tab_tag)
+
             with dpg.child_window(tag=f"plot_container_{plot_id}", autosize_x=True, autosize_y=True):
-                with dpg.plot(label="Rectangular Plot", height=400, width=400, tag=f"plot_{plot_id}"):
+                with dpg.plot(label="Rectangular Plot", tag=f"plot_{plot_id}", height=-1, width=-1):
                     dpg.add_plot_legend()
                     dpg.add_plot_axis(dpg.mvXAxis, label="Frequency (Hz)", tag=f"x_axis_{plot_id}")
                     dpg.add_plot_axis(dpg.mvYAxis, label="Y Axis", tag=f"y_axis_{plot_id}")
-        state.plot_tabs[plot_id] = {"type": "rectangular", "traces": [] if initial_expression is None else [initial_expression], "tab_tag": tab_tag}
-        if initial_expression is not None:
-            add_trace_to_rectangular_plot(plot_id, initial_expression)
-            _update_trace_list(plot_id)
-    elif plot_type.lower() == "smith":
-        with dpg.tab(label="Smith Chart", tag=tab_tag, parent="results_tab_bar"):
-            # Reset zoom button.
+
+            state.plot_tabs[plot_id] = {
+                "type": "rectangular",
+                "traces": [] if initial_expression is None else [initial_expression],
+                "tab_tag": tab_tag,
+                "name": plot_name
+            }
+            if initial_expression is not None:
+                add_trace_to_rectangular_plot(plot_id, initial_expression)
+                _update_trace_list(plot_id)
+
+        elif plot_type.lower() == "smith":
             dpg.add_button(label="Reset Zoom", user_data=plot_id, callback=reset_zoom_callback)
-            # Input for new trace.
             with dpg.group(horizontal=True):
                 dpg.add_input_text(label="Expression", tag=f"smith_expr_input_{plot_id}", default_value="s_matrix[0, 0]")
                 dpg.add_button(label="Add Trace", user_data=plot_id, callback=smith_expression_callback)
-            # Container for the trace list placed above the plot.
-            with dpg.child_window(label="Trace List", tag=f"trace_list_{plot_id}", autosize_x=True, autosize_y=False):
-                pass
-            # Plot widget.
+
+            create_trace_list_container(plot_id, parent=tab_tag)
+
             with dpg.child_window(tag=f"plot_container_{plot_id}", autosize_x=True, autosize_y=True):
-                with dpg.plot(label="Smith Chart", width=600, height=600, equal_aspects=True, tag=f"plot_{plot_id}"):
-                    dpg.add_plot_legend()
-                    dpg.add_plot_axis(dpg.mvXAxis, label="Re", tag=f"x_axis_{plot_id}", no_gridlines=True)
-                    dpg.add_plot_axis(dpg.mvYAxis, label="Im", tag=f"y_axis_{plot_id}", no_gridlines=True)
-                    # Draw unit circle with grey theme.
-                    dpg.bind_item_theme(
-                        dpg.add_line_series(np.cos(np.linspace(0, 2*np.pi, CIRCLE_RES)),
-                                            np.sin(np.linspace(0, 2*np.pi, CIRCLE_RES)),
-                                            parent=f"y_axis_{plot_id}"),
-                        GRAY_THEME
-                    )
-                    # Draw grid lines (resistance and reactance).
-                    draw_smith_grid(plot_id, GRAY_THEME)
-        state.plot_tabs[plot_id] = {"type": "smith", "traces": [], "tab_tag": tab_tag}
+                with dpg.group(horizontal=True, tag=f"smith_wrapper_{plot_id}"):
+                    dpg.add_spacer(tag=f"smith_left_spacer_{plot_id}", width=0)
+                    with dpg.group(tag=f"smith_chart_group_{plot_id}"):
+                        with dpg.plot(label="Smith Chart", tag=f"plot_{plot_id}", equal_aspects=True, height=400, width=400):
+                            dpg.add_plot_legend()
+                            dpg.add_plot_axis(dpg.mvXAxis, label="Re", tag=f"x_axis_{plot_id}", no_gridlines=True)
+                            dpg.add_plot_axis(dpg.mvYAxis, label="Im", tag=f"y_axis_{plot_id}", no_gridlines=True)
+                            dpg.bind_item_theme(
+                                dpg.add_line_series(
+                                    np.cos(np.linspace(0, 2 * np.pi, CIRCLE_RES)),
+                                    np.sin(np.linspace(0, 2 * np.pi, CIRCLE_RES)),
+                                    parent=f"y_axis_{plot_id}"
+                                ),
+                                GRAY_THEME
+                            )
+                            draw_smith_grid(plot_id, GRAY_THEME)
+
+            state.plot_tabs[plot_id] = {
+                "type": "smith",
+                "traces": [],
+                "tab_tag": tab_tag,
+                "name": plot_name
+            }
+
     state.add_log(f"Added new {plot_type} plot tab with id {plot_id}")
 
 def add_new_plot_tab_callback(sender, app_data, user_data):
@@ -437,6 +483,21 @@ def update_ui_callback():
     dpg.set_y_scroll("log_child", 10000)
     update_smith_tooltips()
 
+    # Resize smith chart plots to maintain square aspect and center horizontally
+    for plot_id, info in state.plot_tabs.items():
+        if info["type"] == "smith":
+            try:
+                container_width, container_height = dpg.get_item_rect_size(f"plot_container_{plot_id}")
+                size = max(min(container_width, container_height) - 20, 100)  # margin and minimum size
+                dpg.set_item_width(f"plot_{plot_id}", size)
+                dpg.set_item_height(f"plot_{plot_id}", size)
+                pad = max(0, (container_width - size) // 2)
+                dpg.set_item_width(f"smith_left_spacer_{plot_id}", pad)
+                dpg.set_item_width(f"smith_right_spacer_{plot_id}", pad)
+            except Exception:
+                pass  # Handle early stage creation timing issues
+
+
 def update_diff_preview():
     new_text = dpg.get_value("yaml_editor")
     diff = list(difflib.unified_diff(
@@ -457,44 +518,58 @@ def apply_yaml_edits_callback():
     state.add_log("Netlist YAML updated from editor.")
     update_diff_preview()
 
-# ---------- Global Grey Theme for Smith Chart ----------
-GRAY_THEME = None
-
 # ---------- UI Creation ----------
 def create_ui():
     global GRAY_THEME
+
     # Create the grey theme once.
     with dpg.theme() as gray_theme:
         with dpg.theme_component(dpg.mvLineSeries):
             dpg.add_theme_color(dpg.mvPlotCol_Line, (150, 150, 150, 255), category=dpg.mvThemeCat_Plots)
     GRAY_THEME = gray_theme
 
-    with dpg.window(label="Simulation Control", pos=[10, 10], width=400, height=200):
+    # ----- Root Window -----
+    with dpg.window(tag="root_window", label="RFSim UI", no_title_bar=True, no_resize=True, no_move=True, no_close=True):
+        dpg.set_primary_window("root_window", True)
+
+        # -- Layout: Sidebar + Main Column --
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Browse Netlist", callback=open_netlist_file_dialog_callback)
-            dpg.add_input_text(label="", readonly=True, width=250, tag="netlist_path_display")
-        with dpg.group(horizontal=True):
-            dpg.add_button(label="Browse Sweep Config", callback=open_sweep_file_dialog_callback)
-            dpg.add_input_text(label="", readonly=True, width=250, tag="sweep_path_display")
-        dpg.add_button(label="Run Simulation", callback=run_simulation_callback)
-        dpg.add_progress_bar(default_value=0.0, tag="progress_bar_tag", width=300)
+            # ---------- Sidebar ----------
+            with dpg.child_window(tag="sidebar", width=380, autosize_y=True, border=True):
+                # Simulation Control
+                with dpg.collapsing_header(label="Simulation Control", default_open=True):
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(label="Browse Netlist", callback=open_netlist_file_dialog_callback)
+                        dpg.add_input_text(label="", readonly=True, width=250, tag="netlist_path_display")
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(label="Browse Sweep Config", callback=open_sweep_file_dialog_callback)
+                        dpg.add_input_text(label="", readonly=True, width=250, tag="sweep_path_display")
+                    dpg.add_button(label="Run Simulation", callback=run_simulation_callback)
+                    dpg.add_progress_bar(default_value=0.0, tag="progress_bar_tag", width=300)
 
-    with dpg.window(label="Log Console", pos=[10, 220], width=400, height=200):
-        with dpg.child_window(tag="log_child", autosize_x=True, autosize_y=True):
-            dpg.add_input_text(multiline=True, readonly=True, tag="log_text_tag", width=-1, height=200)
+                # Netlist Editor
+                with dpg.collapsing_header(label="Netlist Editor", default_open=True):
+                    dpg.add_input_text(tag="yaml_editor", multiline=True, width=-1, height=200,
+                                       default_value="", callback=update_diff_preview)
+                    dpg.add_button(label="Apply YAML Edits", callback=apply_yaml_edits_callback)
+                    dpg.add_text("Unsaved Changes Preview:")
+                    dpg.add_input_text(tag="yaml_diff", multiline=True, readonly=True, width=-1, height=180)
 
-    with dpg.window(label="Results Viewer", pos=[420, 10], width=420, height=430):
-        dpg.add_combo(("Rectangular", "Smith"), label="Plot Type", tag="new_plot_type", default_value="Rectangular")
-        dpg.add_button(label="Add New Plot", callback=add_new_plot_tab_callback)
-        with dpg.tab_bar(tag="results_tab_bar"):
-            pass
+            # ---------- Central Work Area ----------
+            with dpg.child_window(tag="main_work_area", autosize_x=True, autosize_y=True, border=True):
+                with dpg.group():
+                    dpg.add_combo(("Rectangular", "Smith"), label="Plot Type", tag="new_plot_type", default_value="Rectangular")
+                    dpg.add_button(label="Add New Plot", callback=add_new_plot_tab_callback)
+                    with dpg.tab_bar(tag="results_tab_bar"):
+                        pass
 
-    with dpg.window(label="Netlist Editor", pos=[850, 10], width=420, height=450):
-        dpg.add_input_text(tag="yaml_editor", multiline=True, width=-1, height=200, default_value="", callback=update_diff_preview)
-        dpg.add_button(label="Apply YAML Edits", callback=apply_yaml_edits_callback)
-        dpg.add_text("Unsaved Changes Preview:")
-        dpg.add_input_text(tag="yaml_diff", multiline=True, readonly=True, width=-1, height=180)
+        # ---------- Log Console ----------
+        with dpg.child_window(tag="log_console", height=140, autosize_x=True, border=True):
+            dpg.add_text("Log Console")
+            with dpg.child_window(tag="log_child", autosize_x=True, autosize_y=True):
+                dpg.add_input_text(multiline=True, readonly=True, tag="log_text_tag", width=-1, height=120)
 
+    # ----- File Dialogs (floating) -----
     with dpg.file_dialog(directory_selector=False, show=False, callback=netlist_file_selected_callback,
                          tag="netlist_file_dialog", width=600, height=400):
         dpg.add_file_extension("YAML Files (*.yaml){.yaml}")
@@ -505,17 +580,26 @@ def create_ui():
         dpg.add_file_extension("YAML Files (*.yaml){.yaml}")
         dpg.add_file_extension("YML Files (*.yml){.yml}")
 
+
 # ---------- Main Application Loop ----------
 def main():
     dpg.create_context()
     create_ui()
-    dpg.create_viewport(title="RFSim Frontend", width=1300, height=520)
+    dpg.create_viewport(title="RFSim Frontend", width=1400, height=800)
     dpg.setup_dearpygui()
     dpg.show_viewport()
+
     while dpg.is_dearpygui_running():
+        # Stretch root window to full viewport size
+        vp_width, vp_height = dpg.get_viewport_client_width(), dpg.get_viewport_client_height()
+        dpg.set_item_width("root_window", vp_width)
+        dpg.set_item_height("root_window", vp_height - 10)  # slight margin
+
         update_ui_callback()
         dpg.render_dearpygui_frame()
+
     dpg.destroy_context()
+
 
 if __name__ == "__main__":
     main()
