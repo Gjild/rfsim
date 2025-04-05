@@ -30,19 +30,15 @@ class DummyComponent(Component):
         return 50 * (I + S) @ np.linalg.inv((I - S) + epsilon * I)
 
 def create_large_circuit(n_components=100):
-    """
-    Build a large circuit with n_components DummyComponent instances.
-    Each component is connected in series to simulate a real-world scenario.
-    """
     circuit = Circuit()
     # For a simple series connection, create nodes "n0" through "nN"
     for i in range(n_components):
         comp = DummyComponent(f"D{i}")
         circuit.add_component(comp)
         if i == 0:
-            circuit.nodes[f"n{i}"] = comp.ports[0].connected_node
-        circuit.nodes[f"n{i+1}"] = comp.ports[1].connected_node
+            circuit.topology_manager.nodes[f"n{i}"] = comp.ports[0].connected_node
     return circuit
+
 
 def test_large_sweep_performance():
     """

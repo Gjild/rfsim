@@ -28,59 +28,58 @@ def robust_inv(matrix: np.ndarray, reg: float = 1e-9) -> np.ndarray:
     try:
         return np.linalg.inv(matrix + reg * I)
     except np.linalg.LinAlgError:
-        logging.warning("robust_inv: singular matrix encountered; using pseudoinverse.")
+        logging.warning("robust_inv: singular matrix encountered; using pseudoinverse with regularization.")
         return np.linalg.pinv(matrix + reg * I)
 
-def z_to_s(Z, Z0=50, reg: float = 1e-9):
+def z_to_s(Z: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert an impedance matrix (Z) to a scattering matrix (S) using regularized inversion.
+    Convert an impedance matrix Z to a scattering matrix S.
     
-    This function first computes a regularized inverse of (Z + Z0*I) to reduce numerical 
-    instability when Z is ill-conditioned. It then applies the standard conversion formula:
-    
-        S = (Z - Z0*I) @ inv(Z + Z0*I)
-    
-    Args:
-        Z: The impedance matrix.
-        Z0: The characteristic impedance (default: 50).
-        reg: Regularization constant (default: 1e-9).
+    Parameters:
+        Z: Impedance matrix.
+        Z0: Characteristic impedance.
+        reg: Regularization constant.
     
     Returns:
-        The scattering matrix corresponding to the given impedance matrix.
+        Scattering matrix S.
     
-    Limitations:
-        Near resonance or when Z is extremely ill-conditioned, the regularization may 
-        affect numerical accuracy. Adjust the `reg` parameter if needed.
+    Warnings:
+        If Z is non-square or non-Hermitian, an assertion or warning is raised.
     """
+    # Check that Z is square
+    assert Z.shape[0] == Z.shape[1], "Impedance matrix must be square."
+    
+    # Optional: Check Hermitian property for passive networks (if needed)
+    if not np.allclose(Z, np.conjugate(Z.T), atol=1e-6):
+        logging.warning(f"z_to_s: Impedance matrix does not appear Hermitian. Hermitian level {np.max(np.abs(Z - np.conjugate(Z.T)))}")
+    
     I = np.eye(Z.shape[0], dtype=complex)
     inv_matrix = robust_inv(Z + Z0 * I, reg=reg)
-    return (Z - Z0 * I) @ inv_matrix
+    S = (Z - Z0 * I) @ inv_matrix
+    return S
 
-def s_to_z(S, Z0=50, reg: float = 1e-9):
+def s_to_z(S: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert a scattering matrix (S) to an impedance matrix (Z) using regularized inversion.
+    Convert a scattering matrix S to an impedance matrix Z.
     
-    The conversion uses the formula:
-    
-        Z = Z0 * (I + S) @ inv(I - S)
-    
-    where the inversion of (I - S) is performed with regularization to improve stability.
-    
-    Args:
-        S: The scattering matrix.
-        Z0: The characteristic impedance (default: 50).
-        reg: Regularization constant (default: 1e-9).
+    Parameters:
+        S: Scattering matrix.
+        Z0: Characteristic impedance.
+        reg: Regularization constant.
     
     Returns:
-        The impedance matrix corresponding to the scattering matrix.
+        Impedance matrix Z.
     
-    Limitations:
-        When S is very close to I, the matrix (I - S) can be nearly singular.
-        The regularization parameter helps, but caution is advised in such cases.
+    Warnings:
+        If S is non-square or close to singular, the function uses robust inversion.
     """
+    # Check that S is square
+    assert S.shape[0] == S.shape[1], "Scattering matrix must be square."
+    
     I = np.eye(S.shape[0], dtype=complex)
     inv_matrix = robust_inv(I - S, reg=reg)
-    return Z0 * (I + S) @ inv_matrix
+    Z = Z0 * (I + S) @ inv_matrix
+    return Z
 
 def db(val):
     """Convert linear magnitude to dB."""

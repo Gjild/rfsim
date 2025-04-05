@@ -33,8 +33,8 @@ def create_dummy_internal_circuit():
     dummy = DummyComponent("dummy")
     circuit.add_component(dummy)
     # Register the nodes used in DummyComponent.
-    circuit.nodes["n1"] = dummy.ports[0].connected_node
-    circuit.nodes["n2"] = dummy.ports[1].connected_node
+    circuit.topology_manager.nodes["n1"] = dummy.ports[0].connected_node
+    circuit.topology_manager.nodes["n2"] = dummy.ports[1].connected_node
     return circuit
 
 def test_subcircuit_get_smatrix():
@@ -62,8 +62,9 @@ def test_subcircuit_flatten():
     subckt = Subcircuit("sub1", internal_circuit, interface_map)
     flat = subckt.flatten()
     # Verify that the flattened circuit has nodes renamed to external port names.
-    assert "ext1" in flat.nodes
-    assert "ext2" in flat.nodes
+    assert "ext1" in flat.topology_manager.nodes
+    assert "ext2" in flat.topology_manager.nodes
     # Check that the flattened circuit retains the same number of components.
     assert len(flat.components) == len(internal_circuit.components)
-    # Optionally, one could verify that components connected to the interface nodes now point to the renamed nodes.
+    # Optionally, verify that components connected to the interface nodes now point to the renamed nodes.
+

@@ -1,7 +1,5 @@
 import numpy as np
-import pytest
-from utils.matrix import z_to_s, s_to_z
-from core.exceptions import RFSimError
+from utils.matrix import z_to_s, s_to_z     
 
 def test_singular_matrix_inversion():
     """
@@ -45,7 +43,7 @@ def test_conflicting_parameter_definitions():
     Test that the merge_params function logs a warning and correctly overrides
     conflicting parameter definitions.
     """
-    from symbolic.parameters import merge_params
+    from symbolic.utils import merge_params
     import logging
     # Set up a logging capture (using pytest's caplog fixture)
     params1 = {"a": 1, "b": 2}

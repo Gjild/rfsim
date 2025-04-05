@@ -1,6 +1,6 @@
-import pytest
 import sympy
-from symbolic.parameters import merge_params, resolve_parameters
+from symbolic.utils import merge_params
+from symbolic.evaluator import evaluate_parameter, resolve_all_parameters
 
 def test_merge_params():
     dict1 = {"a": 1, "b": 2}
@@ -13,11 +13,13 @@ def test_merge_params():
 def test_resolve_parameters_numeric():
     expr = "2 * x + 1"
     param_dict = {"x": 3}
-    value = resolve_parameters(expr, param_dict)
+    # Use evaluate_parameter to resolve a single expression.
+    value = evaluate_parameter(expr, param_dict)
     assert value == 7.0
 
 def test_resolve_parameters_symbolic():
     expr = sympy.sympify("2 * x + 1")
     param_dict = {"x": 4}
-    value = resolve_parameters(expr, param_dict)
+    value = evaluate_parameter(expr, param_dict)
     assert value == 9.0
+

@@ -1,9 +1,11 @@
 # evaluation/sweep.py
 import numpy as np
-from concurrent.futures import ProcessPoolExecutor
 import itertools
 import logging
 import time
+from concurrent.futures import ProcessPoolExecutor
+from core.evaluation_types import EvaluationPoint
+from core.exceptions import ComponentEvaluationError
 
 # Top-level helper for evaluation.
 def _evaluate_point(circuit, freq, param_values, keys):

@@ -1,6 +1,5 @@
 import numpy as np
 from utils.matrix import z_to_s, s_to_z
-import pytest
 
 def test_z_to_s_and_back():
     # Define a two-port impedance matrix for a resistor:

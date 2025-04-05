@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from core.topology.circuit import Circuit, EvaluationResult
+from core.topology.circuit import Circuit
 from core.behavior.component import Component
 from core.topology.port import Port
 from core.topology.node import Node
@@ -30,9 +30,8 @@ def test_evaluate():
     circuit = Circuit()
     comp = DummyComponent("dummy")
     circuit.add_component(comp)
-    # Populate the circuit’s node dictionary.
-    circuit.nodes["n1"] = comp.ports[0].connected_node
-    circuit.nodes["n2"] = comp.ports[1].connected_node
+    # Populate the circuit’s node dictionary via the topology manager.
+    circuit.topology_manager.nodes["n1"] = comp.ports[0].connected_node
     result = circuit.evaluate(1e9, {})
     # Instead of exact equality, check that the S-matrix is 2x2 and not all zeros.
     assert result.s_matrix.shape == (2, 2)

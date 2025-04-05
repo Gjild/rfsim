@@ -1,16 +1,21 @@
 # core/exceptions.py
+
 class RFSimError(Exception):
-    """Base exception for all RFSim errors."""
+    """Base exception for RFSim errors."""
     pass
 
 class ParameterError(RFSimError):
-    """Exception raised for errors during parameter resolution."""
+    """Raised when parameter resolution or evaluation fails."""
     pass
 
 class TopologyError(RFSimError):
-    """Exception raised for circuit topology validation errors."""
+    """Raised when there is an issue with circuit topology."""
+    pass
+
+class ComponentEvaluationError(RFSimError):
+    """Raised when a component fails during evaluation."""
     pass
 
 class SubcircuitMappingError(RFSimError):
-    """Exception raised for subcircuit port mapping errors."""
+    """Raised when a subcircuit interface mapping is invalid."""
     pass

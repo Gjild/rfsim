@@ -25,8 +25,8 @@ def test_rc_lowpass():
     circuit = Circuit()
     comp = RCComponent("RC1")
     circuit.add_component(comp)
-    circuit.nodes["n1"] = comp.ports[0].connected_node
-    circuit.nodes["n2"] = comp.ports[1].connected_node
+    circuit.topology_manager.nodes["n1"] = comp.ports[0].connected_node
+    circuit.topology_manager.nodes["n2"] = comp.ports[1].connected_node
     result = circuit.evaluate(1e9, {})
     # Instead of exact values, check shape and that some elements are nonzero.
     assert result.s_matrix.shape == (2, 2)

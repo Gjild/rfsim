@@ -5,7 +5,8 @@ from typing import Dict, Any
 from cerberus import Validator
 from core.topology.circuit import Circuit
 from components.factory import get_component_class
-from symbolic.parameters import merge_params, resolve_all_parameters
+from symbolic.utils import merge_params
+from symbolic.evaluator import resolve_all_parameters
 from core.exceptions import RFSimError
 from utils.logging_config import get_logger
 
@@ -106,15 +107,12 @@ def parse_netlist(yaml_file: str) -> Circuit:
     
     circuit = Circuit()
     if "parameters" in data:
-        # Resolve all parameters considering dependencies.
+        # Fully resolve all parameters considering dependencies.
         circuit.parameters = resolve_all_parameters(data["parameters"])
     
     # Store external ports if provided.
-    if "external_ports" in data:
-        circuit.external_ports = data["external_ports"]
-    else:
-        circuit.external_ports = None
-
+    circuit.external_ports = data.get("external_ports", None)
+    
     # Component creation remains as before.
     for comp in data.get("components", []):
         comp_id = comp.get("id")
@@ -127,7 +125,7 @@ def parse_netlist(yaml_file: str) -> Circuit:
         try:
             ComponentClass = get_component_class(comp_type)
             component = ComponentClass(comp_id, comp_params)
-            component._type_name = comp_type.lower()
+            # Removed instance-level type assignment; type_name is now a class attribute.
         except Exception as e:
             logger.error("Error creating component '%s' of type '%s': %s", comp_id, comp_type, e)
             continue
