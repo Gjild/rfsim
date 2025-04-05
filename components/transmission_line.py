@@ -6,6 +6,8 @@ from symbolic.parameters import resolve_parameters, merge_params
 from components.two_port_mixin import robust_inv
 
 class TransmissionLineComponent(TwoPortComponent):
+    type_name = "transmission_line"  # Added class attribute for robust identification
+
     def __init__(self, id: str, params: dict = None) -> None:
         ports = [
             Port(name="1", index=0, connected_node=None),
@@ -18,7 +20,7 @@ class TransmissionLineComponent(TwoPortComponent):
         }
         all_params = merge_params(default_params, params or {})
         super().__init__(id, ports, all_params)
-    
+
     def get_zmatrix(self, freq: float, params: dict) -> np.ndarray:
         merged = merge_params(self.params, params or {})
         Z0_value = resolve_parameters(self.params.get("Z0", "50"), merged)

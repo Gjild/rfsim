@@ -1,11 +1,12 @@
+# inout/yaml_parser.py
 import yaml
 import logging
 from typing import Dict, Any
 from cerberus import Validator
 from core.topology.circuit import Circuit
 from components.factory import get_component_class
-from symbolic.parameters import merge_params
-from core.exceptions import RFSimError  # Base exception for all RFSim errors
+from symbolic.parameters import merge_params, resolve_all_parameters
+from core.exceptions import RFSimError
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -101,29 +102,27 @@ def parse_netlist(yaml_file: str) -> Circuit:
     """
     with open(yaml_file, 'r') as f:
         data = yaml.safe_load(f)
-
     data = validate_schema(data, NETLIST_SCHEMA)
-
+    
     circuit = Circuit()
     if "parameters" in data:
-        circuit.parameters = data["parameters"]
+        # Resolve all parameters considering dependencies.
+        circuit.parameters = resolve_all_parameters(data["parameters"])
     
-    # Store the external ports in the circuit (if provided)
+    # Store external ports if provided.
     if "external_ports" in data:
         circuit.external_ports = data["external_ports"]
     else:
         circuit.external_ports = None
 
-    # --- Component creation ---
+    # Component creation remains as before.
     for comp in data.get("components", []):
         comp_id = comp.get("id")
         comp_type = comp.get("type")
         comp_params = comp.get("params", {})
-
         if not comp_id or not comp_type:
             logger.error("Component entry missing 'id' or 'type'; skipping.")
             continue
-
         comp_params = merge_params(circuit.parameters, comp_params)
         try:
             ComponentClass = get_component_class(comp_type)
@@ -132,10 +131,9 @@ def parse_netlist(yaml_file: str) -> Circuit:
         except Exception as e:
             logger.error("Error creating component '%s' of type '%s': %s", comp_id, comp_type, e)
             continue
-
         circuit.add_component(component)
-
-    # --- Connection processing ---
+    
+    # Connection processing remains unchanged.
     for conn in data.get("connections", []):
         port_ref = conn.get("port")
         node_name = conn.get("node")
@@ -150,7 +148,7 @@ def parse_netlist(yaml_file: str) -> Circuit:
             circuit.connect_port(comp_id, port_name, node_name)
         except RFSimError as e:
             logger.error("Error connecting '%s' to node '%s': %s", port_ref, node_name, e)
-
+    
     return circuit
 
 def parse_sweep_config(yaml_file: str) -> Dict[str, Any]:

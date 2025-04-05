@@ -7,27 +7,15 @@ from components.inductor import InductorComponent
 from components.transmission_line import TransmissionLineComponent
 from core.exceptions import RFSimError
 
-# Registry mapping component type names to their classes.
+# Use the type_name attributes from each class.
 _component_registry: Dict[str, Type[Component]] = {
-    "resistor": ResistorComponent,
-    "capacitor": CapacitorComponent,
-    "inductor": InductorComponent,
-    "transmission_line": TransmissionLineComponent
+    ResistorComponent.type_name: ResistorComponent,
+    CapacitorComponent.type_name: CapacitorComponent,
+    InductorComponent.type_name: InductorComponent,
+    TransmissionLineComponent.type_name: TransmissionLineComponent
 }
 
 def get_component_class(type_name: str) -> Type[Component]:
-    """
-    Retrieve the component class corresponding to the given type name.
-    
-    Args:
-        type_name: The type name of the component.
-    
-    Returns:
-        The component class.
-    
-    Raises:
-        RFSimError: If type_name is not a string or the component is not registered.
-    """
     if not isinstance(type_name, str):
         raise RFSimError("Component type name must be a string.")
     comp_class = _component_registry.get(type_name.lower())
@@ -36,16 +24,6 @@ def get_component_class(type_name: str) -> Type[Component]:
     return comp_class
 
 def register_component(type_name: str, comp_class: Type[Component]) -> None:
-    """
-    Register a new component class under the specified type name.
-    
-    Args:
-        type_name: The type name for registration.
-        comp_class: The component class (subclass of Component).
-    
-    Raises:
-        RFSimError: If the inputs are invalid.
-    """
     if not isinstance(type_name, str):
         raise RFSimError("Component type name must be a string.")
     if not issubclass(comp_class, Component):

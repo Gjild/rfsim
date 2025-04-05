@@ -1,19 +1,18 @@
+# evaluation/sweep.py
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 import itertools
 import logging
 import time
 
-# NEW: Top-level helper so it can be pickled.
+# Top-level helper for evaluation.
 def _evaluate_point(circuit, freq, param_values, keys):
     local_params = {keys[i]: param_values[i] for i in range(len(keys))}
     try:
         res = circuit.evaluate(freq, local_params)
         return (freq, local_params, res.s_matrix)
     except Exception as e:
-        # Log the error with detailed context.
         logging.error(f"Error at frequency {freq:.3e} Hz with parameters {local_params}: {e}")
-        # Return an error tuple so that the sweep engine can collect and report it separately.
         return (freq, local_params, None, str(e))
 
 class SweepResult:
@@ -58,13 +57,17 @@ def sweep(circuit, config):
     errors = []
     start_time = time.time()
 
+    # Sanitize the circuit before sending it to worker processes.
+    sanitized_circuit = circuit.prepare_for_parallel()
+
     with ProcessPoolExecutor() as executor:
-        futures = [executor.submit(_evaluate_point, circuit, freq, param_vals, keys)
-                   for freq, param_vals in [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]]
+        futures = [
+            executor.submit(_evaluate_point, sanitized_circuit, freq, param_vals, keys)
+            for freq, param_vals in [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]
+        ]
         for future in futures:
             result = future.result()
             if len(result) == 4:
-                # Append error information without mixing with valid S-matrix data.
                 errors.append(f"Frequency {result[0]:.3e} Hz, Params {result[1]}: {result[-1]}")
             else:
                 freq, local_params, s_matrix = result
