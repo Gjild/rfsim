@@ -1,0 +1,17 @@
+# frontend/utils/constants.py
+
+# Layout and UI constants
+FILE_DIALOG_WIDTH = 600
+FILE_DIALOG_HEIGHT = 400
+MIN_SMITH_SIZE = 100
+SMITH_MARGIN = 20
+
+# Plot constants
+CIRCLE_RES = 500
+REACTANCE_RES = 2000
+UNIT_CIRCLE_CLIP = 0.999
+RESISTANCE_VALUES = [0.2, 0.5, 1, 2, 5]
+REACTANCE_VALUES = [0.2, 0.5, 1, 2, 5]
+
+DEFAULT_RECT_EXPR = "abs(z_to_s(Z)[1, 0])"
+DEFAULT_SMITH_EXPR = "s_matrix[0, 0]"
