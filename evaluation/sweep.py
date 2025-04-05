@@ -8,15 +8,15 @@ from core.evaluation_types import EvaluationPoint
 from core.exceptions import ComponentEvaluationError
 
 # Top-level helper for evaluation.
-def _evaluate_point(circuit, freq, param_values, keys):
+def _evaluate_point(circuit, freq, param_values, keys) -> EvaluationPoint:
     local_params = {keys[i]: param_values[i] for i in range(len(keys))}
     try:
         res = circuit.evaluate(freq, local_params)
-        return (freq, local_params, res.s_matrix)
+        return EvaluationPoint(frequency=freq, parameters=local_params, s_matrix=res.s_matrix)
     except Exception as e:
         logging.error(f"Error at frequency {freq:.3e} Hz with parameters {local_params}: {e}")
-        return (freq, local_params, None, str(e))
-
+        return EvaluationPoint(frequency=freq, parameters=local_params, error=str(e))
+    
 class SweepResult:
     """
     Encapsulates sweep results and basic statistics.

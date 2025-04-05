@@ -13,7 +13,6 @@ def test_merge_params():
 def test_resolve_parameters_numeric():
     expr = "2 * x + 1"
     param_dict = {"x": 3}
-    # Use evaluate_parameter to resolve a single expression.
     value = evaluate_parameter(expr, param_dict)
     assert value == 7.0
 
@@ -22,4 +21,3 @@ def test_resolve_parameters_symbolic():
     param_dict = {"x": 4}
     value = evaluate_parameter(expr, param_dict)
     assert value == 9.0
-
