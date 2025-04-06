@@ -5,6 +5,7 @@ from components.resistor import ResistorComponent
 from components.capacitor import CapacitorComponent
 from components.inductor import InductorComponent
 from components.transmission_line import TransmissionLineComponent
+from components.touchstone import TouchstoneComponent
 from core.exceptions import RFSimError
 
 # Use the type_name attributes from each class.
@@ -12,8 +13,9 @@ _component_registry: Dict[str, Type[Component]] = {
     ResistorComponent.type_name: ResistorComponent,
     CapacitorComponent.type_name: CapacitorComponent,
     InductorComponent.type_name: InductorComponent,
-    TransmissionLineComponent.type_name: TransmissionLineComponent
-}
+    TransmissionLineComponent.type_name: TransmissionLineComponent,
+    TouchstoneComponent.type_name: TouchstoneComponent,
+    }
 
 def get_component_class(type_name: str) -> Type[Component]:
     if not isinstance(type_name, str):
