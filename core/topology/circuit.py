@@ -129,6 +129,9 @@ class Circuit:
         """
         errors = []
         for comp in self.components:
+            connected_nodes = [p.connected_node.name for p in comp.ports if p.connected_node]
+            if len(connected_nodes) != len(set(connected_nodes)):
+                errors.append(f"Component '{comp.id}' has multiple ports connected to the same node.")
             for port in comp.ports:
                 if port.connected_node is None:
                     errors.append(f"Floating port: Component '{comp.id}' port '{port.name}' is unconnected.")

@@ -48,7 +48,7 @@ NETLIST_SCHEMA: Dict[str, Any] = {
 }
 
 # Define a schema for the sweep configuration.
-SWEEP_SCHEMA: Dict[str, Any] = {
+SWEEP_SCHEMA = {
     'sweep': {
         'type': 'list',
         'required': True,
@@ -56,11 +56,15 @@ SWEEP_SCHEMA: Dict[str, Any] = {
             'type': 'dict',
             'schema': {
                 'param': {'type': 'string', 'required': True},
-                # For frequency sweep, expect a range (list of 2 numbers) and points.
-                'range': {'type': 'list', 'required': False, 'minlength': 2, 'maxlength': 2, 'schema': {'type': 'number'}},
+                'range': {
+                    'type': 'list',
+                    'minlength': 2,
+                    'maxlength': 2,
+                    'schema': {'type': 'number', 'coerce': float},
+                    'required': False
+                },
                 'points': {'type': 'integer', 'required': False},
-                'scale': {'type': 'string', 'required': False, 'allowed': ['linear', 'log']},
-                # For non-frequency parameters, we expect a list of values.
+                'scale': {'type': 'string', 'allowed': ['linear', 'log'], 'required': False},
                 'values': {'type': 'list', 'required': False}
             }
         }

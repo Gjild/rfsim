@@ -39,27 +39,27 @@ def flatten_subcircuit(subcircuit) -> Circuit:
         SubcircuitMappingError: If any external interface mapping references a non-existent internal node.
     """
     flat_circuit: Circuit = subcircuit.circuit.clone()
-    tm = flat_circuit.topology_manager  # Access the topology manager
-
+    tm = flat_circuit.topology_manager
+    # If a required node is missing in the clone, retrieve it from the original
+    original_nodes = subcircuit.circuit.topology_manager.nodes
     for ext_port, internal_node in subcircuit.interface_port_map.items():
         if internal_node not in tm.nodes:
-            raise SubcircuitMappingError(
-                f"Internal node '{internal_node}' for external port '{ext_port}' not found."
-            )
-        # Retrieve the node and rename it.
+            if internal_node in original_nodes:
+                tm.nodes[internal_node] = original_nodes[internal_node]
+            else:
+                raise SubcircuitMappingError(
+                    f"Internal node '{internal_node}' for external port '{ext_port}' not found."
+                )
+        # Now, rename the node and update the topology
         node = tm.nodes[internal_node]
         old_name = node.name
         node.name = ext_port
-        # Update the topology manager: add the new key and remove the old one.
         tm.nodes[ext_port] = node
         del tm.nodes[old_name]
-        # Relabel the graph.
         if tm.graph.has_node(old_name):
             tm.graph = nx.relabel_nodes(tm.graph, {old_name: ext_port})
-        # Update component port connections.
         for comp in flat_circuit.components:
             for port in comp.ports:
                 if port.connected_node and port.connected_node.name == old_name:
                     port.connected_node = node
-
     return flat_circuit

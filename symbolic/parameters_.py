@@ -31,13 +31,39 @@ def compile_expr(expr: Union[str, sympy.Expr]) -> Tuple[sympy.Expr, Any]:
         raise ParameterError(f"Could not compile expression '{expr}': {e}")
 
 def resolve_parameters(expr: Union[str, sympy.Expr], param_dict: Dict[str, Any]) -> float:
-    try:
-        if isinstance(expr, str):
+    """
+    Resolve a parameter expression to a float value.
+
+    If the expression is a string and appears to contain unit symbols,
+    attempt to parse it with the Pint unit registry. Otherwise, compile
+    the expression symbolically and substitute any dependent parameters
+    from param_dict.
+
+    Parameters:
+        expr: The parameter expression as a string or sympy.Expr.
+        param_dict: Dictionary mapping parameter names to their values.
+
+    Returns:
+        The evaluated float value of the expression.
+
+    Raises:
+        ParameterError: If the expression cannot be resolved.
+    """
+    # First, if expr is a string, try to see if it includes units.
+    if isinstance(expr, str):
+        # Heuristic: check for common unit strings; you can expand this list as needed.
+        unit_keywords = ["ohm", "F", "nF", "pF", "H", "s", "S"]
+        if any(unit in expr for unit in unit_keywords):
             try:
                 quantity = ureg.Quantity(expr)
+                # Convert to base units and return the magnitude.
                 return quantity.to_base_units().magnitude
             except Exception:
+                # Fall back to symbolic evaluation if Pint parsing fails.
                 pass
+
+    # Fall back to symbolic resolution.
+    try:
         sym_expr, func = compile_expr(expr)
         symbols = sorted(sym_expr.free_symbols, key=lambda s: str(s))
         subs_list = []
@@ -46,16 +72,17 @@ def resolve_parameters(expr: Union[str, sympy.Expr], param_dict: Dict[str, Any])
             if sname in param_dict:
                 subs_list.append(param_dict[sname])
             else:
-                found = False
+                # Try a secondary lookup: sometimes parameter names may match.
                 for key in param_dict:
                     if sname == key:
                         subs_list.append(param_dict[key])
-                        found = True
                         break
-                if not found:
-                    raise ParameterError(f"Parameter '{sname}' not found in the provided dictionary.")
-        value = float(func(*subs_list))
-        return value
+                else:
+                    raise ParameterError(
+                        f"Parameter '{sname}' not found in the provided dictionary."
+                    )
+        value = func(*subs_list)
+        return float(value)
     except Exception as e:
         logging.error(f"Error evaluating expression '{expr}' with parameters {param_dict}: {e}")
         raise ParameterError(f"Error resolving '{expr}': {e}")
