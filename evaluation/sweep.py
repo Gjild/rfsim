@@ -68,13 +68,12 @@ def sweep(circuit, config):
             for freq, param_vals in [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]
         ]
         for future in futures:
-            result = future.result()
-            if len(result) == 4:
-                errors.append(f"Frequency {result[0]:.3e} Hz, Params {result[1]}: {result[-1]}")
+            point = future.result()  # point is an EvaluationPoint
+            if point.error:
+                errors.append(f"Frequency {point.frequency:.3e} Hz, Params {point.parameters}: {point.error}")
             else:
-                freq, local_params, s_matrix = result
-                key = (round(freq, 9), tuple(sorted(local_params.items())))
-                results[key] = s_matrix
+                key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
+                results[key] = point.s_matrix
     elapsed = time.time() - start_time
     stats = {"points": len(freq_sweep) * len(values_product), "elapsed": elapsed}
     return SweepResult(results, errors, stats)

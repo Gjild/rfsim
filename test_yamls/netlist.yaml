@@ -10,7 +10,7 @@ components:
   - id: C1
     type: capacitor
     params:
-      C: "3pF"
+      C: "1pF"
     ports:
       - "1"
       - "2"

@@ -146,6 +146,13 @@ def parse_netlist(yaml_file: str) -> Circuit:
             circuit.connect_port(comp_id, port_name, node_name)
         except RFSimError as e:
             logger.error("Error connecting '%s' to node '%s': %s", port_ref, node_name, e)
+
+    # -------------------------------------------
+    # (1) Mark the "gnd" node (if it exists) as ground.
+    # -------------------------------------------
+    if "gnd" in circuit.topology_manager.nodes:
+        node_obj = circuit.topology_manager.nodes["gnd"]
+        node_obj.is_ground = True
     
     return circuit
 

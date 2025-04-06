@@ -1,40 +1,45 @@
 # components/transmission_line.py
+
 import numpy as np
 from core.behavior.component import TwoPortComponent
-from core.topology.port import Port
-from symbolic.utils import merge_params
 from symbolic.evaluator import resolve_all_parameters
-from components.two_port_mixin import robust_inv
+from symbolic.utils import merge_params
+from utils.matrix import robust_inv, s_to_y
 
 class TransmissionLineComponent(TwoPortComponent):
-    type_name = "transmission_line"  # Added class attribute for robust identification
+    type_name = "transmission_line"
 
     def __init__(self, id: str, params: dict = None) -> None:
-        ports = [
-            Port(name="1", index=0, connected_node=None),
-            Port(name="2", index=1, connected_node=None)
-        ]
+        from core.topology.port import Port
+        ports = [Port("1", 0, None), Port("2", 1, None)]
         default_params = {
             "Z0": "50",
-            "length": "0.1",      # in meters
-            "beta": "2*pi/0.3"     # assume wavelength 0.3 m for simplicity
+            "length": "0.1",
+            "beta": "2*pi/0.3"
         }
         all_params = merge_params(default_params, params or {})
         super().__init__(id, ports, all_params)
 
-    def get_zmatrix(self, freq: float, params: dict) -> np.ndarray:
+    def get_smatrix(self, freq: float, params: dict, Z0=50) -> np.ndarray:
+        """
+        Same as your existing method, returning a 2x2 S-parameter for the line.
+        """
         merged = merge_params(self.params, params or {})
-        # Fully resolve the merged parameters (using the new resolve_all_parameters API)
         resolved = resolve_all_parameters(merged)
         Z0_value = resolved["Z0"]
         length = resolved["length"]
         beta = resolved["beta"]
+
         theta = beta * length
         T = np.exp(-1j * theta)
-        S_matrix = np.array([[0, T], [T, 0]], dtype=complex)
-        I = np.eye(2, dtype=complex)
-        # Use the robust inversion helper for numerical stability.
-        inv_term = robust_inv(I - S_matrix, reg=1e-9)
-        Z = Z0_value * (I + S_matrix) @ inv_term
-        return Z
+        S = np.array([[0, T], [T, 0]], dtype=complex)
+        return S
 
+    def get_ymatrix(self, freq: float, params: dict) -> np.ndarray:
+        """
+        Convert the TLine’s S-parameters to Y-parameters for MNA stamping.
+        """
+        S = self.get_smatrix(freq, params, Z0=50)
+        from utils.matrix import s_to_y
+        Y = s_to_y(S, Z0=50)
+        return Y

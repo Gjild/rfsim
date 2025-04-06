@@ -81,6 +81,44 @@ def s_to_z(S: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
     Z = Z0 * (I + S) @ inv_matrix
     return Z
 
+def y_to_s(Y: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+    """
+    Convert an N-port admittance matrix Y to the scattering matrix S,
+    using the standard formula:
+
+        S = (Y0I - Y) * inv(Y0I + Y)
+
+    where Y0 = 1/Z0 and I is the identity matrix.
+
+    We regularize the inversion with 'reg' similarly to robust_inv.
+    """
+    assert Y.shape[0] == Y.shape[1], "Y must be square."
+    I = np.eye(Y.shape[0], dtype=complex)
+    Y0 = 1.0 / Z0
+    # Y0I + Y
+    M = Y0 * I + Y
+    # Use your robust_inv or direct np.linalg.inv:
+    from utils.matrix import robust_inv
+    M_inv = robust_inv(M, reg=reg)
+    S = (Y0*I - Y) @ M_inv
+    return S
+
+def s_to_y(S: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+    """
+    Convert scattering matrix S to admittance matrix Y:
+
+        Y = Y0 * (I - S)^{-1} * (I + S)
+
+    where Y0 = 1/Z0.
+    """
+    assert S.shape[0] == S.shape[1], "S must be square."
+    I = np.eye(S.shape[0], dtype=complex)
+    Y0 = 1.0 / Z0
+    from utils.matrix import robust_inv
+    inv_part = robust_inv(I - S, reg=reg)
+    Y = Y0 * inv_part @ (I + S)
+    return Y
+
 def db(val):
     """Convert linear magnitude to dB."""
     return 20 * np.log10(np.abs(val))

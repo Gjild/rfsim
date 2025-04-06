@@ -31,79 +31,94 @@ class Evaluator:
     def __init__(self, context: EvaluationContext):
         self.context = context
 
-    def assemble_global_zmatrix(self, circuit, freq, params):
+    def assemble_global_ymatrix(self, circuit, freq, params):
         """
-        Assemble the global impedance matrix for a circuit.
+        Assemble the global nodal Y matrix for the circuit.
+        Then we can do node reduction, etc.
+
+        Returns:
+            Y_global: (n x n) complex array (admittance)
+            node_index: dict mapping node name -> row/col index
         """
         node_names = list(circuit.topology_manager.nodes.keys())
         n = len(node_names)
         node_index = {node: i for i, node in enumerate(node_names)}
-        Z_global = np.zeros((n, n), dtype=complex)
-        if self.context.backend == "Z":
-            for comp in circuit.components:
+
+        # Start empty Y
+        Y_global = np.zeros((n, n), dtype=complex)
+
+        for comp in circuit.components:
+            try:
+                # This is the new official route:
+                Y_comp = comp.get_ymatrix(freq, params)
+            except AttributeError:
+                # Fallback: if a comp only has S or Z, convert to Y
                 try:
-                    Z_comp = comp.get_zmatrix(freq, params)
-                except AttributeError:
-                    try:
-                        S = comp.get_smatrix(freq, params, Z0=self.context.Z0)
-                        Z_comp = s_to_z(S, Z0=self.context.Z0)
-                    except Exception as e:
-                        logging.error(f"Component {comp.id} conversion failure: {e}")
-                        continue
-                port_nodes = [port.connected_node.name for port in comp.ports if port.connected_node]
-                if len(port_nodes) != Z_comp.shape[0]:
-                    logging.warning(f"Component {comp.id} port count mismatch in Z stamping.")
+                    S = comp.get_smatrix(freq, params, Z0=self.context.Z0)
+                    from utils.matrix import s_to_y
+                    Y_comp = s_to_y(S, Z0=self.context.Z0)
+                except Exception as e:
+                    logging.error(f"Component {comp.id} conversion failure: {e}")
                     continue
-                for i, ni in enumerate(port_nodes):
-                    for j, nj in enumerate(port_nodes):
-                        Z_global[node_index[ni], node_index[nj]] += Z_comp[i, j]
-            for i in range(n):
-                Z_global[i, i] += self.context.Z0
-            return Z_global, node_index
-        else:
-            S_blocks = []
-            for comp in circuit.components:
-                S = comp.get_smatrix(freq, params, Z0=self.context.Z0)
-                S_blocks.append(S)
-            S_global = np.block([
-                [S_blocks[i] if i == j else np.zeros((S_blocks[i].shape[0], S_blocks[j].shape[1]), dtype=complex)
-                 for j in range(len(S_blocks))]
-                for i in range(len(S_blocks))
-            ])
-            return s_to_z(S_global, Z0=self.context.Z0), {}
+
+            # Map each of the component’s ports to circuit node indices
+            port_nodes = [p.connected_node.name for p in comp.ports if p.connected_node]
+            if len(port_nodes) != Y_comp.shape[0]:
+                logging.warning(f"Component {comp.id} port count mismatch in Y stamping.")
+                continue
+
+            # Stamp Y_comp into Y_global
+            for i, ni in enumerate(port_nodes):
+                for j, nj in enumerate(port_nodes):
+                    Y_global[node_index[ni], node_index[nj]] += Y_comp[i, j]
+
+        return Y_global, node_index
 
     def evaluate(self, circuit, freq: float, params: dict):
         """
-        Evaluate the circuit at the given frequency and parameter values.
+        The main high-level function. We build Y_global, reduce it,
+        then get S from the reduced Y.
         """
-        Z_global, node_index = self.assemble_global_zmatrix(circuit, freq, params)
+        Y_global, node_index = self.assemble_global_ymatrix(circuit, freq, params)
+
+        # If the user defined external ports:
         if hasattr(circuit, 'external_ports') and circuit.external_ports:
-            ext_nodes = [node for node in circuit.external_ports if node in node_index]
-            missing_ext = [node for node in circuit.external_ports if node not in node_index]
+            ext_nodes = [n for n in circuit.external_ports if n in node_index]
+            missing_ext = [n for n in circuit.external_ports if n not in node_index]
             if missing_ext:
                 logging.error("External nodes not found in circuit: " + ", ".join(missing_ext))
-            ext_indices = [node_index[node] for node in ext_nodes]
+
+            ext_indices = [node_index[n] for n in ext_nodes]
             all_nodes = list(node_index.keys())
-            int_nodes = [node for node in all_nodes if node not in ext_nodes]
-            int_indices = [node_index[node] for node in int_nodes]
-            Z_ee = Z_global[np.ix_(ext_indices, ext_indices)]
+            int_nodes = [n for n in all_nodes if n not in ext_nodes]
+            int_indices = [node_index[n] for n in int_nodes]
+
+            Y_ee = Y_global[np.ix_(ext_indices, ext_indices)]
             if int_indices:
-                Z_ei = Z_global[np.ix_(ext_indices, int_indices)]
-                Z_ie = Z_global[np.ix_(int_indices, ext_indices)]
-                Z_ii = Z_global[np.ix_(int_indices, int_indices)]
+                Y_ei = Y_global[np.ix_(ext_indices, int_indices)]
+                Y_ie = Y_global[np.ix_(int_indices, ext_indices)]
+                Y_ii = Y_global[np.ix_(int_indices, int_indices)]
+                # reduce
                 try:
-                    Z_ii_inv = np.linalg.inv(Z_ii)
+                    Y_ii_inv = np.linalg.inv(Y_ii)
                 except np.linalg.LinAlgError:
-                    logging.warning("Z_ii is singular; using pseudoinverse for network reduction.")
-                    Z_ii_inv = np.linalg.pinv(Z_ii)
-                effective_Z = Z_ee - Z_ei @ Z_ii_inv @ Z_ie
+                    logging.warning("Y_ii is singular; using pseudoinverse for network reduction.")
+                    Y_ii_inv = np.linalg.pinv(Y_ii)
+                Y_eff = Y_ee - Y_ei @ Y_ii_inv @ Y_ie
             else:
-                effective_Z = Z_ee
-            S = z_to_s(effective_Z, Z0=self.context.Z0)
+                # no internal nodes
+                Y_eff = Y_ee
+
+            # Convert to S
+            from utils.matrix import y_to_s
+            S = y_to_s(Y_eff, Z0=self.context.Z0)
             port_order = ext_nodes
             stats = {"n_ports": len(port_order)}
             return EvaluationResult(S, port_order, node_index, stats=stats)
+
         else:
+            # No external_ports → we just treat each component's ports as "ports"
+            # same idea: gather their node indices -> produce Y_ports -> convert to S
             port_order = []
             port_indices = []
             for comp in circuit.components:
@@ -113,14 +128,17 @@ class Evaluator:
                         port_indices.append(node_index[port.connected_node.name])
                     else:
                         port_indices.append(None)
+
             n_ports = len(port_order)
-            Z_ports = np.zeros((n_ports, n_ports), dtype=complex)
+            Y_ports = np.zeros((n_ports, n_ports), dtype=complex)
             for i in range(n_ports):
                 for j in range(n_ports):
                     if port_indices[i] is None or port_indices[j] is None:
-                        Z_ports[i, j] = 1e12
+                        # treat that like an open?
+                        Y_ports[i, j] += 0.0
                     else:
-                        Z_ports[i, j] = Z_global[port_indices[i], port_indices[j]]
-            S = z_to_s(Z_ports, Z0=self.context.Z0)
+                        Y_ports[i, j] += Y_global[port_indices[i], port_indices[j]]
+
+            S = y_to_s(Y_ports, Z0=self.context.Z0)
             stats = {"n_ports": n_ports}
             return EvaluationResult(S, port_order, node_index, stats=stats)

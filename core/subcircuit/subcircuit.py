@@ -23,7 +23,7 @@ class Subcircuit(Component):
     def get_smatrix(self, freq, params, Z0=50):
         merged_params = merge_params(self.params, params)
         # Assemble the internal circuit's global impedance matrix.
-        Z_global, node_index = self.circuit.assemble_global_zmatrix(freq, merged_params)
+        Y_global, node_index = self.circuit.assemble_global_ymatrix(freq, merged_params)
         # Build indices for external ports based on the interface mapping.
         indices = []
         for ext_port, internal_node in self.interface_port_map.items():
@@ -33,9 +33,9 @@ class Subcircuit(Component):
                 )
             indices.append(node_index[internal_node])
         # Extract the submatrix corresponding to the interface nodes.
-        sub_Z = Z_global[np.ix_(indices, indices)]
-        from utils.matrix import z_to_s
-        S = z_to_s(sub_Z, Z0)
+        sub_Y = Y_global[np.ix_(indices, indices)]
+        from utils.matrix import y_to_s
+        S = y_to_s(sub_Y, Z0)
         return S
 
     def get_zmatrix(self, freq, params):

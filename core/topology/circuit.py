@@ -29,11 +29,8 @@ class Circuit:
             if port.connected_node is not None:
                 self.topology_manager.update_topology_for_port(component.id, port)
 
-    def assemble_global_zmatrix(self, freq, params):
-        """
-        Delegate global Z-matrix assembly to the evaluator.
-        """
-        return self.evaluator.assemble_global_zmatrix(self, freq, params)
+    def assemble_global_ymatrix(self, freq, params):
+        return self.evaluator.assemble_global_ymatrix(self, freq, params)
 
     def remove_component(self, comp_id: str) -> None:
         """
