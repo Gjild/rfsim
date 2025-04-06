@@ -2,7 +2,7 @@
 import numpy as np
 import networkx as nx
 import logging
-from utils.matrix import z_to_s, s_to_z
+import scipy.sparse as sp
 
 class EvaluationResult:
     def __init__(self, s_matrix, port_order, node_mapping, errors=None, stats=None):
@@ -44,15 +44,15 @@ class Evaluator:
         n = len(node_names)
         node_index = {node: i for i, node in enumerate(node_names)}
 
-        # Start empty Y
-        Y_global = np.zeros((n, n), dtype=complex)
+        # Accumulate sparse matrix data.
+        rows = []
+        cols = []
+        data = []
 
         for comp in circuit.components:
             try:
-                # This is the new official route:
                 Y_comp = comp.get_ymatrix(freq, params)
             except AttributeError:
-                # Fallback: if a comp only has S or Z, convert to Y
                 try:
                     S = comp.get_smatrix(freq, params, Z0=self.context.Z0)
                     from utils.matrix import s_to_y
@@ -61,17 +61,21 @@ class Evaluator:
                     logging.error(f"Component {comp.id} conversion failure: {e}")
                     continue
 
-            # Map each of the component’s ports to circuit node indices
+            # Map component ports to circuit node indices.
             port_nodes = [p.connected_node.name for p in comp.ports if p.connected_node]
             if len(port_nodes) != Y_comp.shape[0]:
                 logging.warning(f"Component {comp.id} port count mismatch in Y stamping.")
                 continue
 
-            # Stamp Y_comp into Y_global
             for i, ni in enumerate(port_nodes):
                 for j, nj in enumerate(port_nodes):
-                    Y_global[node_index[ni], node_index[nj]] += Y_comp[i, j]
+                    rows.append(node_index[ni])
+                    cols.append(node_index[nj])
+                    data.append(Y_comp[i, j])
 
+        # Create a sparse matrix from the data.
+        Y_global_sparse = sp.coo_matrix((data, (rows, cols)), shape=(n, n))
+        Y_global = Y_global_sparse.todense()
         return Y_global, node_index
 
     def evaluate(self, circuit, freq: float, params: dict):

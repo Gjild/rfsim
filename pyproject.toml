@@ -16,6 +16,7 @@ dependencies = [
     "pint>=0.24.4",
     "matplotlib>=3.10.1",
     "ruamel-yaml>=0.18.10",
+    "scipy>=1.15.2",
 ]
 
 [dependency-groups]

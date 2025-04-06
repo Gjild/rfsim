@@ -17,10 +17,18 @@ def _evaluate_point(circuit, freq, param_values, keys) -> EvaluationPoint:
         logging.error(f"Error at frequency {freq:.3e} Hz with parameters {local_params}: {e}")
         return EvaluationPoint(frequency=freq, parameters=local_params, error=str(e))
     
+
+def evaluate_batch(circuit, batch_points, keys):
+    """
+    Evaluate a batch of sweep points.
+    """
+    batch_results = []
+    for freq, param_vals in batch_points:
+        point = _evaluate_point(circuit, freq, param_vals, keys)
+        batch_results.append(point)
+    return batch_results
+    
 class SweepResult:
-    """
-    Encapsulates sweep results and basic statistics.
-    """
     def __init__(self, results, errors, stats=None):
         self.results = results
         self.errors = errors
@@ -38,6 +46,9 @@ class SweepResult:
         return pd.DataFrame(rows)
 
 def sweep(circuit, config):
+    """
+    Run the sweep simulation by evaluating batches of sweep points in parallel.
+    """
     sweep_list = config.get("sweep", [])
     freq_sweep = None
     param_sweeps = {}
@@ -55,25 +66,29 @@ def sweep(circuit, config):
             param_sweeps[param] = s.get("values")
     keys = list(param_sweeps.keys())
     values_product = list(itertools.product(*param_sweeps.values())) if param_sweeps else [()]
+    sweep_points = [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]
+
     results = {}
     errors = []
     start_time = time.time()
 
-    # Sanitize the circuit before sending it to worker processes.
+    # Prepare a sanitized clone for parallel evaluation.
     sanitized_circuit = circuit.prepare_for_parallel()
 
+    # Batch the sweep points to reduce overhead.
+    batch_size = 100  # Tune as needed.
+    batches = [sweep_points[i:i+batch_size] for i in range(0, len(sweep_points), batch_size)]
+
     with ProcessPoolExecutor() as executor:
-        futures = [
-            executor.submit(_evaluate_point, sanitized_circuit, freq, param_vals, keys)
-            for freq, param_vals in [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]
-        ]
+        futures = [executor.submit(evaluate_batch, sanitized_circuit, batch, keys) for batch in batches]
         for future in futures:
-            point = future.result()  # point is an EvaluationPoint
-            if point.error:
-                errors.append(f"Frequency {point.frequency:.3e} Hz, Params {point.parameters}: {point.error}")
-            else:
-                key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
-                results[key] = point.s_matrix
+            for point in future.result():
+                if point.error:
+                    errors.append(f"Frequency {point.frequency:.3e} Hz, Params {point.parameters}: {point.error}")
+                else:
+                    key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
+                    results[key] = point.s_matrix
+
     elapsed = time.time() - start_time
-    stats = {"points": len(freq_sweep) * len(values_product), "elapsed": elapsed}
+    stats = {"points": len(sweep_points), "elapsed": elapsed}
     return SweepResult(results, errors, stats)

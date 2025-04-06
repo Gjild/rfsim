@@ -3,51 +3,6 @@ from core.behavior.component import TwoPortComponent
 from core.topology.port import Port
 from symbolic.utils import merge_params
 from symbolic.evaluator import resolve_all_parameters
-
-
-# Example "auto-picking" version
-class SingleImpedanceComponent(TwoPortComponent):
-    type_name: str = "undefined"
-    default_params: dict = {}
-    param_key: str = "X"  # e.g. "R", "C", or "L"
-
-    # We hold one of the mixin objects. By default we pick series, but we can switch below.
-    _zmatrix_builder = None  
-
-    def __init__(self, id: str, params: dict = None) -> None:
-        ports = [Port("1", 0, None), Port("2", 1, None)]
-        all_params = merge_params(self.default_params, params or {})
-        super().__init__(id, ports, all_params)
-        # We'll set _zmatrix_builder lazily in get_zmatrix() once we know if port2 is ground.
-
-    def impedance_expr(self, freq: float, value: float) -> complex:
-        """
-        Subclasses (Resistor, Capacitor, etc.) must override. 
-        Returns Z as a complex number for the device. 
-        """
-        raise NotImplementedError("Impedance expression not implemented.")
-
-    def pick_zmatrix_mixin(self):
-        """Decide whether we are 'series' or 'shunt' based on whether port2 is ground."""
-        from components.two_port_mixin import SeriesTwoPortZMixin, ShuntTwoPortZMixin
-        port2_node = self.ports[1].connected_node
-        # If second port is recognized as ground, pick Shunt. Otherwise pick Series.
-        if port2_node is not None and getattr(port2_node, 'is_ground', False):
-            return ShuntTwoPortZMixin()
-        else:
-            return SeriesTwoPortZMixin()
-
-    def get_zmatrix(self, freq: float, params: dict) -> np.ndarray:
-        merged = merge_params(self.params, params or {})
-        resolved = resolve_all_parameters(merged)
-        value = resolved[self.param_key]
-        Z = self.impedance_expr(freq, value)
-
-        # Pick the right submatrix builder on the fly, if not already chosen.
-        if self._zmatrix_builder is None:
-            self._zmatrix_builder = self.pick_zmatrix_mixin()
-
-        return self._zmatrix_builder._build_two_port_impedance(Z)
     
 
 class SingleImpedanceComponent(TwoPortComponent):
