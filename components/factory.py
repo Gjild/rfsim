@@ -7,6 +7,13 @@ from components.inductor import InductorComponent
 from components.transmission_line import TransmissionLineComponent
 from components.touchstone import TouchstoneComponent
 from core.exceptions import RFSimError
+from components.phase_shifter import PhaseShifterComponent
+from components.circulator import CirculatorComponent
+from components.attenuator import AttenuatorComponent
+from components.hybrid_coupler import HybridCouplerComponent
+from components.directional_coupler import DirectionalCouplerComponent
+from components.wilkinson import WilkinsonDividerComponent
+from components.transformer import TransformerComponent
 
 # Use the type_name attributes from each class.
 _component_registry: Dict[str, Type[Component]] = {
@@ -15,6 +22,14 @@ _component_registry: Dict[str, Type[Component]] = {
     InductorComponent.type_name: InductorComponent,
     TransmissionLineComponent.type_name: TransmissionLineComponent,
     TouchstoneComponent.type_name: TouchstoneComponent,
+    PhaseShifterComponent.type_name: PhaseShifterComponent,
+    CirculatorComponent.type_name: CirculatorComponent,
+    AttenuatorComponent.type_name: AttenuatorComponent,
+    HybridCouplerComponent.type_name: HybridCouplerComponent,
+    DirectionalCouplerComponent.type_name: DirectionalCouplerComponent,
+    WilkinsonDividerComponent.type_name: WilkinsonDividerComponent,
+    TransformerComponent.type_name: TransformerComponent,
+
     }
 
 def get_component_class(type_name: str) -> Type[Component]:
