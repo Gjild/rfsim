@@ -16,5 +16,6 @@ class EvaluationPoint:
     """
     frequency: float
     parameters: Dict[str, Any]
-    s_matrix: Optional[np.ndarray] = None
+    s_matrix: Optional[np.ndarray] = None  # Convenience field: same as evaluation_result.s_matrix
     error: Optional[str] = None
+    evaluation_result: Optional[Any] = None  # NEW field to store full EvaluationResult

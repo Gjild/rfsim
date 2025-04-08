@@ -1,10 +1,17 @@
+# test Netlist
+
 parameters:
   scale: 1.0
 
-# New section to list external nodes (in the desired order)
 external_ports:
-  - p1
-  - p2
+  - name: p1
+    impedance:
+      type: fixed
+      value: "1"
+  - name: p2
+    impedance:
+      type: fixed
+      value: "100"
 
 components:
   - id: C1
@@ -47,8 +54,6 @@ components:
       - "1"
       - "2"
 
-
-
 connections:
   - port: C1.1
     node: p1
@@ -70,5 +75,3 @@ connections:
     node: p2
   - port: C3.2
     node: gnd
-
-  

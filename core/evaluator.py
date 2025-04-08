@@ -1,8 +1,8 @@
-# core/evaluator.py
 import numpy as np
 import networkx as nx
 import logging
 import scipy.sparse as sp
+from utils.matrix import y_to_s  # Now supports vectorized and arbitrary impedances
 
 class EvaluationResult:
     def __init__(self, s_matrix, port_order, node_mapping, errors=None, stats=None):
@@ -28,14 +28,12 @@ class Evaluator:
     """
     Encapsulates circuit evaluation strategies.
     """
-    def __init__(self, context: EvaluationContext):
+    def __init__(self, context):
         self.context = context
 
     def assemble_global_ymatrix(self, circuit, freq, params):
         """
         Assemble the global nodal Y matrix for the circuit.
-        Then we can do node reduction, etc.
-
         Returns:
             Y_global: (n x n) complex array (admittance)
             node_index: dict mapping node name -> row/col index
@@ -54,6 +52,7 @@ class Evaluator:
                 Y_comp = comp.get_ymatrix(freq, params)
             except AttributeError:
                 try:
+                    # Fall-back: compute Y from S if Y is not available.
                     S = comp.get_smatrix(freq, params, Z0=self.context.Z0)
                     from utils.matrix import s_to_y
                     Y_comp = s_to_y(S, Z0=self.context.Z0)
@@ -80,29 +79,45 @@ class Evaluator:
 
     def evaluate(self, circuit, freq: float, params: dict):
         """
-        The main high-level function. We build Y_global, reduce it,
-        then get S from the reduced Y.
+        Evaluate the circuit: build the global Y matrix, reduce it to the external ports,
+        and then convert it to the scattering matrix (S-parameters).
+
+        For external ports, the evaluation now retrieves each port's impedance from
+        its impedance model so that arbitrary, complex, and different impedances are
+        honored in the conversion to S-parameters.
         """
         Y_global, node_index = self.assemble_global_ymatrix(circuit, freq, params)
 
-        # If the user defined external ports:
-        if hasattr(circuit, 'external_ports') and circuit.external_ports:
-            ext_nodes = [n for n in circuit.external_ports if n in node_index]
-            missing_ext = [n for n in circuit.external_ports if n not in node_index]
-            if missing_ext:
-                logging.error("External nodes not found in circuit: " + ", ".join(missing_ext))
+        if circuit.external_ports:
+            ext_nodes = []
+            # Build a vector of reference impedances for the external ports.
+            ext_impedance_list = []
+            for node_name, port_obj in circuit.external_ports.items():
+                if node_name in node_index:
+                    ext_nodes.append(node_name)
+                    try:
+                        # Retrieve each port's impedance (which may be complex and different)
+                        imp = port_obj.impedance.get_impedance(freq, params)
+                        ext_impedance_list.append(imp)
+                    except Exception as e:
+                        logging.error(f"Failed to evaluate impedance for port '{node_name}': {e}")
+                        raise
+                else:
+                    raise ValueError(f"External node '{node_name}' not found in circuit.")
 
+            # Obtain indices for external nodes.
             ext_indices = [node_index[n] for n in ext_nodes]
             all_nodes = list(node_index.keys())
-            int_nodes = [n for n in all_nodes if n not in ext_nodes]
+            # Exclude both the external nodes and the ground node from reduction.
+            int_nodes = [n for n in all_nodes if n not in ext_nodes and n.lower() != "gnd"]
             int_indices = [node_index[n] for n in int_nodes]
 
+            # Extract the portion of Y corresponding to external nodes.
             Y_ee = Y_global[np.ix_(ext_indices, ext_indices)]
             if int_indices:
                 Y_ei = Y_global[np.ix_(ext_indices, int_indices)]
                 Y_ie = Y_global[np.ix_(int_indices, ext_indices)]
                 Y_ii = Y_global[np.ix_(int_indices, int_indices)]
-                # reduce
                 try:
                     Y_ii_inv = np.linalg.inv(Y_ii)
                 except np.linalg.LinAlgError:
@@ -110,39 +125,47 @@ class Evaluator:
                     Y_ii_inv = np.linalg.pinv(Y_ii)
                 Y_eff = Y_ee - Y_ei @ Y_ii_inv @ Y_ie
             else:
-                # no internal nodes
                 Y_eff = Y_ee
 
-            # Convert to S
+            # Convert the effective Y matrix to an S-matrix using the vector of per-port impedances.
             from utils.matrix import y_to_s
-            S = y_to_s(Y_eff, Z0=self.context.Z0)
+            S = y_to_s(Y_eff, Z0=ext_impedance_list)
             port_order = ext_nodes
             stats = {"n_ports": len(port_order)}
             return EvaluationResult(S, port_order, node_index, stats=stats)
 
         else:
-            # No external_ports → we just treat each component's ports as "ports"
-            # same idea: gather their node indices -> produce Y_ports -> convert to S
+            # Fallback branch: For each component port, use its specific impedance
+            # if available; otherwise, default to the evaluator's context impedance.
             port_order = []
+            ref_impedance_list = []  # Build reference impedance per port.
             port_indices = []
             for comp in circuit.components:
                 for port in comp.ports:
                     port_order.append(f"{comp.id}.{port.name}")
-                    if port.connected_node and node_index:
+                    if port.connected_node and port.connected_node.name in node_index:
                         port_indices.append(node_index[port.connected_node.name])
+                        try:
+                            # Query each port's model for its reference impedance.
+                            impedance = port.impedance.get_impedance(freq, params)
+                        except Exception as e:
+                            logging.error(f"Error retrieving impedance for port {comp.id}.{port.name}: {e}")
+                            impedance = self.context.Z0  # Fallback if evaluation fails.
                     else:
                         port_indices.append(None)
+                        impedance = self.context.Z0  # Fallback for unconnected ports.
+                    ref_impedance_list.append(impedance)
 
             n_ports = len(port_order)
             Y_ports = np.zeros((n_ports, n_ports), dtype=complex)
             for i in range(n_ports):
                 for j in range(n_ports):
                     if port_indices[i] is None or port_indices[j] is None:
-                        # treat that like an open?
                         Y_ports[i, j] += 0.0
                     else:
                         Y_ports[i, j] += Y_global[port_indices[i], port_indices[j]]
 
-            S = y_to_s(Y_ports, Z0=self.context.Z0)
-            stats = {"n_ports": n_ports}
+            from utils.matrix import y_to_s
+            S = y_to_s(Y_ports, Z0=ref_impedance_list)
+            stats = {"n_ports": len(port_order), "ref_impedance_vector": ext_impedance_list}
             return EvaluationResult(S, port_order, node_index, stats=stats)

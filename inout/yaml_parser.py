@@ -9,17 +9,52 @@ from symbolic.utils import merge_params
 from symbolic.evaluator import resolve_all_parameters
 from core.exceptions import RFSimError
 from utils.logging_config import get_logger
+from ports.impedance_factory import create_impedance_model_from_config
+from core.topology.port import Port
+
+
 
 logger = get_logger(__name__)
 
 # Define a schema for the netlist.
 NETLIST_SCHEMA: Dict[str, Any] = {
-    'parameters': {'type': 'dict', 'required': False},
-    # New schema entry for external ports.
+    'parameters': {
+        'type': 'dict',
+        'required': False,
+    },
     'external_ports': {
         'type': 'list',
         'required': False,
-        'schema': {'type': 'string'}
+        'schema': {
+            'type': 'dict',
+            'schema': {
+                'name': {
+                    'type': 'string',
+                    'required': True,
+                },
+                'impedance': {
+                    'type': 'dict',
+                    'required': True,
+                    'schema': {
+                        'type': {
+                            'type': 'string',
+                            'required': True,
+                            'allowed': ['fixed', 'freq_dep', 's1p'],  # Extend as needed.
+                        },
+                        # For the "fixed" type, a "value" is expected.
+                        'value': {
+                            'type': 'string',
+                            'required': False,
+                        },
+                        # For frequency-dependent impedances, a "function" key is required.
+                        'function': {
+                            'type': 'string',
+                            'required': False,
+                        },
+                    }
+                },
+            }
+        }
     },
     'components': {
         'type': 'list',
@@ -27,12 +62,27 @@ NETLIST_SCHEMA: Dict[str, Any] = {
         'schema': {
             'type': 'dict',
             'schema': {
-                'id': {'type': 'string', 'required': True},
-                'type': {'type': 'string', 'required': True},
-                'params': {'type': 'dict', 'required': False},
-                'ports': {'type': 'list', 'required': True, 'schema': {'type': 'string'}}
-            }
-        }
+                'id': {
+                    'type': 'string',
+                    'required': True,
+                },
+                'type': {
+                    'type': 'string',
+                    'required': True,
+                },
+                'params': {
+                    'type': 'dict',
+                    'required': False,
+                },
+                'ports': {
+                    'type': 'list',
+                    'required': True,
+                    'schema': {
+                        'type': 'string'
+                    },
+                },
+            },
+        },
     },
     'connections': {
         'type': 'list',
@@ -40,14 +90,19 @@ NETLIST_SCHEMA: Dict[str, Any] = {
         'schema': {
             'type': 'dict',
             'schema': {
-                'port': {'type': 'string', 'required': True},
-                'node': {'type': 'string', 'required': True}
-            }
-        }
-    }
+                'port': {
+                    'type': 'string',
+                    'required': True,
+                },
+                'node': {
+                    'type': 'string',
+                    'required': True,
+                },
+            },
+        },
+    },
 }
 
-# Define a schema for the sweep configuration.
 SWEEP_SCHEMA = {
     'sweep': {
         'type': 'list',
@@ -64,11 +119,15 @@ SWEEP_SCHEMA = {
                     'required': False
                 },
                 'points': {'type': 'integer', 'required': False},
-                'scale': {'type': 'string', 'allowed': ['linear', 'log'], 'required': False},
+                'scale': {
+                    'type': 'string',
+                    'allowed': ['linear', 'log'],
+                    'required': False
+                },
                 'values': {'type': 'list', 'required': False}
-            }
-        }
-    }
+            },
+        },
+    },
 }
 
 def validate_schema(data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -114,8 +173,18 @@ def parse_netlist(yaml_file: str) -> Circuit:
         # Fully resolve all parameters considering dependencies.
         circuit.parameters = resolve_all_parameters(data["parameters"])
     
-    # Store external ports if provided.
-    circuit.external_ports = data.get("external_ports", None)
+        external_ports_data = data.get("external_ports", None)
+        external_ports = {}
+        if external_ports_data:
+            for entry in external_ports_data:
+                # entry is expected to be a dictionary.
+                name = entry.get("name")
+                impedance_spec = entry.get("impedance", {"type": "fixed", "value": "50"})
+                port_obj = Port(name, index=0, impedance=create_impedance_model_from_config(impedance_spec))
+                external_ports[name] = port_obj
+            circuit.external_ports = external_ports
+        else:
+            circuit.external_ports = {}
     
     # Component creation remains as before.
     for comp in data.get("components", []):

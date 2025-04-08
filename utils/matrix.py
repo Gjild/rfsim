@@ -23,62 +23,161 @@ def robust_inv(matrix: np.ndarray, reg: float = 1e-9) -> np.ndarray:
         return np.linalg.pinv(matrix + reg * I)
     
 
-def z_to_s(Z: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+def z_to_s(Z: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert an impedance matrix Z to a scattering matrix S.
+    Convert an impedance matrix Z to a scattering matrix S, handling nonuniform port impedances.
+
+    Parameters:
+      Z : np.ndarray
+          An NxN impedance matrix.
+      Z0 : scalar or array-like
+          The reference impedance(s) for each port. Can be a scalar (all ports identical)
+          or an array-like of length N.
+      reg : float
+          Regularization term for numerical stability.
+
+    Returns:
+      S : np.ndarray
+          The scattering matrix, computed as:
+              S = D^{-1} (Z - Z0_diag) inv(Z + Z0_diag) D,
+          with D = diag(sqrt(Z0_vec)) and Z0_diag = diag(Z0_vec).
     """
-    assert Z.shape[0] == Z.shape[1], "Impedance matrix must be square."
-    I = np.eye(Z.shape[0], dtype=complex)
-    inv_matrix = robust_inv(Z + Z0 * I, reg=reg)
-    S = (Z - Z0 * I) @ inv_matrix
+    N = Z.shape[0]
+    # Create reference impedance vector.
+    if np.isscalar(Z0):
+        Z0_vec = np.array([Z0] * N)
+    else:
+        Z0_vec = np.array(Z0)
+    if len(Z0_vec) != N:
+        raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
+
+    Z0_diag = np.diag(Z0_vec)
+    D = np.diag(np.sqrt(Z0_vec))
+    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+
+    M = Z + Z0_diag
+    M_inv = robust_inv(M, reg=reg)
+    S = D_inv @ (Z - Z0_diag) @ M_inv @ D
     return S
 
-def s_to_z(S: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+def s_to_z(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert a scattering matrix S to an impedance matrix Z.
+    Convert a scattering matrix S to an impedance matrix Z, handling nonuniform port impedances.
+
+    Parameters:
+      S : np.ndarray
+          An NxN scattering matrix.
+      Z0 : scalar or array-like
+          The reference impedance(s) for each port.
+      reg : float
+          Regularization term for numerical stability.
+
+    Returns:
+      Z : np.ndarray
+          The impedance matrix, computed as:
+              Z = D @ (I + S') @ inv(I - S') @ D,
+          where S' = D^{-1} S D and D = diag(sqrt(Z0_vec)).
     """
-    assert S.shape[0] == S.shape[1], "Scattering matrix must be square."
-    I = np.eye(S.shape[0], dtype=complex)
-    inv_matrix = robust_inv(I - S, reg=reg)
-    Z = Z0 * (I + S) @ inv_matrix
+    N = S.shape[0]
+    if np.isscalar(Z0):
+        Z0_vec = np.array([Z0] * N)
+    else:
+        Z0_vec = np.array(Z0)
+    if len(Z0_vec) != N:
+        raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
+
+    D = np.diag(np.sqrt(Z0_vec))
+    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+    S_prime = D_inv @ S @ D
+    I = np.eye(N, dtype=complex)
+    inv_I_minus_S = robust_inv(I - S_prime, reg=reg)
+    # Compute Z using the derived relation:
+    Z = D @ ((I + S_prime) @ inv_I_minus_S) @ D
     return Z
 
-def y_to_s(Y: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert an N-port admittance matrix Y to the scattering matrix S,
-    using the standard formula:
-
-        S = (Y0I - Y) * inv(Y0I + Y)
-
-    where Y0 = 1/Z0 and I is the identity matrix.
-
-    We regularize the inversion with 'reg' similarly to robust_inv.
+    Convert an admittance matrix Y to a scattering matrix S for nonuniform port impedances.
+    
+    Parameters:
+      Y: np.ndarray
+         The NxN admittance matrix.
+      Z0: scalar or array-like
+         The reference impedance for each port. Can be a scalar (all ports identical)
+         or an array-like of length N.
+      reg: float
+         Regularization term for numerical stability.
+    
+    Returns:
+      S: np.ndarray
+         The resulting scattering matrix.
     """
-    assert Y.shape[0] == Y.shape[1], "Y must be square."
-    I = np.eye(Y.shape[0], dtype=complex)
-    Y0 = 1.0 / Z0
-    # Y0I + Y
-    M = Y0 * I + Y
-    # Use your robust_inv or direct np.linalg.inv:
-    from utils.matrix import robust_inv
-    M_inv = robust_inv(M, reg=reg)
-    S = (Y0*I - Y) @ M_inv
+    N = Y.shape[0]
+    # Create the reference impedance vector.
+    if np.isscalar(Z0):
+        Z0_vec = np.array([Z0] * N)
+    else:
+        Z0_vec = np.array(Z0)
+    if len(Z0_vec) != N:
+        raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
+
+    # Y0 is the diagonal matrix of the port admittances.
+    Y0 = np.diag(1.0 / Z0_vec)
+    
+    # Create scaling matrices for normalization.
+    D = np.diag(np.sqrt(Z0_vec))
+    D_inv = np.diag(1.0 / np.sqrt(Z0_vec))
+    
+    # Form the sum Y0 + Y and regularize if needed.
+    M = Y0 + Y
+    cond_M = np.linalg.cond(M)
+    if cond_M > 1e6:
+        reg = max(reg, cond_M * 1e-12)
+        logging.warning(f"High condition number in (Y0+Y): {cond_M:.2e}; using reg={reg}")
+    
+    try:
+        M_inv = robust_inv(M, reg=reg)
+    except Exception as e:
+        raise ValueError(f"Failed to invert (Y0+Y) matrix: {e}")
+    
+    # The proper conversion when Z0 is nonuniform:
+    S = D_inv @ ((Y0 - Y) @ M_inv) @ D
     return S
 
-def s_to_y(S: np.ndarray, Z0: float = 50, reg: float = 1e-9) -> np.ndarray:
+def s_to_y(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert scattering matrix S to admittance matrix Y:
+    Convert a scattering matrix S to an admittance matrix Y, handling nonuniform port impedances.
 
-        Y = Y0 * (I - S)^{-1} * (I + S)
+    Parameters:
+      S : np.ndarray
+          An NxN scattering matrix.
+      Z0 : scalar or array-like
+          The reference impedance(s) for each port.
+      reg : float
+          Regularization term for numerical stability.
 
-    where Y0 = 1/Z0.
+    Returns:
+      Y : np.ndarray
+          The admittance matrix, computed as:
+              Y = Y0_diag @ (I - S') @ inv(I + S'),
+          where S' = D^{-1} S D, Y0_diag = diag(1/Z0_vec),
+          and D = diag(sqrt(Z0_vec)).
     """
-    assert S.shape[0] == S.shape[1], "S must be square."
-    I = np.eye(S.shape[0], dtype=complex)
-    Y0 = 1.0 / Z0
-    from utils.matrix import robust_inv
-    inv_part = robust_inv(I - S, reg=reg)
-    Y = Y0 * inv_part @ (I + S)
+    N = S.shape[0]
+    if np.isscalar(Z0):
+        Z0_vec = np.array([Z0] * N)
+    else:
+        Z0_vec = np.array(Z0)
+    if len(Z0_vec) != N:
+        raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
+
+    D = np.diag(np.sqrt(Z0_vec))
+    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+    S_prime = D_inv @ S @ D
+    I = np.eye(N, dtype=complex)
+    inv_I_plus_S = robust_inv(I + S_prime, reg=reg)
+    Y0_diag = np.diag(1.0 / Z0_vec)
+    Y = Y0_diag @ (I - S_prime) @ inv_I_plus_S
     return Y
 
 def db(val):

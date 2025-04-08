@@ -12,7 +12,12 @@ def _evaluate_point(circuit, freq, param_values, keys) -> EvaluationPoint:
     local_params = {keys[i]: param_values[i] for i in range(len(keys))}
     try:
         res = circuit.evaluate(freq, local_params)
-        return EvaluationPoint(frequency=freq, parameters=local_params, s_matrix=res.s_matrix)
+        return EvaluationPoint(
+            frequency=freq,
+            parameters=local_params,
+            s_matrix=res.s_matrix,  # You can still keep this for backward compatibility or convenience.
+            evaluation_result=res  # NEW: full evaluation context!
+        )
     except Exception as e:
         logging.error(f"Error at frequency {freq:.3e} Hz with parameters {local_params}: {e}")
         return EvaluationPoint(frequency=freq, parameters=local_params, error=str(e))
@@ -37,13 +42,23 @@ class SweepResult:
     def to_dataframe(self):
         import pandas as pd
         rows = []
-        for (freq, params_tuple), s_matrix in self.results.items():
+        for (freq, params_tuple), eval_result in self.results.items():
             key_freq = round(freq, 9)
             row = {"frequency": key_freq}
             row.update(dict(params_tuple))
-            row["s_matrix"] = s_matrix
+            if eval_result is not None:
+                row["s_matrix"] = eval_result.s_matrix
+                row["port_order"] = eval_result.port_order
+                row["node_mapping"] = eval_result.node_mapping
+                row["stats"] = eval_result.stats
+            else:
+                row["s_matrix"] = None
+                row["port_order"] = None
+                row["node_mapping"] = None
+                row["stats"] = None
             rows.append(row)
         return pd.DataFrame(rows)
+
 
 def sweep(circuit, config):
     """
@@ -83,11 +98,12 @@ def sweep(circuit, config):
         futures = [executor.submit(evaluate_batch, sanitized_circuit, batch, keys) for batch in batches]
         for future in futures:
             for point in future.result():
+                key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
                 if point.error:
                     errors.append(f"Frequency {point.frequency:.3e} Hz, Params {point.parameters}: {point.error}")
+                    results[key] = None  # Alternatively, you could store the point with error details.
                 else:
-                    key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
-                    results[key] = point.s_matrix
+                    results[key] = point.evaluation_result  # Store the full evaluation result.
 
     elapsed = time.time() - start_time
     stats = {"points": len(sweep_points), "elapsed": elapsed}

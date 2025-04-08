@@ -63,15 +63,21 @@ def main() -> None:
         freqs = []
         smatrices = []
         params_list = []
-        for (freq, param_tuple), S in result.results.items():
+        for (freq, param_tuple), eval_result in result.results.items():
             freqs.append(freq)
-            smatrices.append(S)
+            if eval_result is not None:
+                smatrices.append(eval_result.s_matrix)
+            else:
+                smatrices.append(None)
             params_list.append(dict(param_tuple))
+
         np.savez(args.dump, freqs=freqs, smatrices=smatrices, params=params_list)
         print(f"Sweep results dumped to {args.dump}")
 
-    for key in result.results:
-        print(f"Point: {key} -> S-matrix shape: {result.results[key].shape}")
+    #for key in result.results:
+    #    print(f"Point: {key} -> S-matrix shape: {result.results[key].shape}")
+
+    print("Done.")
 
 if __name__ == "__main__":
     main()

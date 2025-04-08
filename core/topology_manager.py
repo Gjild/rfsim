@@ -33,18 +33,37 @@ class TopologyManager:
         if self.graph.has_node(node_name):
             self.graph.remove_node(node_name)
 
+    def register_external_port(self, comp_id: str, port: Port) -> None:
+        """
+        Register an external port with the topology.
+        The port must have a connected node (a Node instance) assigned.
+        """
+        if port.connected_node is None:
+            raise RFSimError(f"Cannot register external port {port}: no node connected.")
+        node_name = port.connected_node.name
+        # Add the node if it is not already present.
+        if node_name not in self.nodes:
+            self.add_node(node_name)
+        # Add an edge from the component (comp_id) to the node,
+        # storing the full Port object as part of the edge data.
+        self.graph.add_edge(comp_id, node_name, port=port)
+
     def update_topology_for_port(self, comp_id: str, port: Port) -> None:
         """
-        Update the topology by ensuring the port's connected node is registered
-        and adding an edge from the component to that node.
+        Update the topology for a specific port.
+        This ensures that the port's connected node is registered and that the edge between
+        the component and the node is current.
         """
-        if port.connected_node:
-            node_name = port.connected_node.name
-            if node_name not in self.nodes:
-                self.nodes[node_name] = port.connected_node
-            if not self.graph.has_node(node_name):
-                self.graph.add_node(node_name, node=port.connected_node)
-            self.graph.add_edge(comp_id, node_name, port=port)
+        if port.connected_node is None:
+            raise RFSimError(f"Port {port} is not connected to any node.")
+        node_name = port.connected_node.name
+        if node_name not in self.nodes:
+            self.add_node(node_name)
+        # Ensure the node exists in the graph.
+        if not self.graph.has_node(node_name):
+            self.graph.add_node(node_name, node=port.connected_node)
+        # Add an edge from the component ID to the node with the full Port object.
+        self.graph.add_edge(comp_id, node_name, port=port)
 
     def connect_port(self, comp_id: str, port: Port, node_name: str) -> None:
         """

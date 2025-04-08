@@ -39,15 +39,14 @@ class Component(ABC):
     def clone(self):
         """
         Create a shallow clone of the component.
-        Ports are cloned with the same properties, preserving the connected_node reference
-        (which will later be updated by the Circuit clone).
+        Ports are cloned with the same properties, preserving the connected_node reference.
         """
         new_ports = []
         for port in self.ports:
-            new_port = Port(port.name, port.index, port.connected_node, port.Z0)
+            # Update from port.Z0 (legacy) to port.impedance in the new design.
+            new_port = Port(port.name, port.index, port.connected_node, port.impedance)
             new_ports.append(new_port)
-
-        # Inspect the subclass __init__ to decide whether to pass "params".
+        # Use type introspection to create a new instance.
         sig = inspect.signature(self.__class__.__init__)
         if 'params' in sig.parameters:
             try:
@@ -56,7 +55,6 @@ class Component(ABC):
                 new_comp = self.__class__(self.id)
         else:
             new_comp = self.__class__(self.id)
-
         new_comp.ports = new_ports
         return new_comp
 
