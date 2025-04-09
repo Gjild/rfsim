@@ -7,7 +7,7 @@ import numpy as np
 # Import the updated matrix conversion functions.
 from utils import matrix as mat
 
-# The original safe globals, now without our conversion functions re‑bound.
+# Global safe namespace that doesn’t include the per‑point conversion functions.
 SAFE_EVAL_CONTEXT: Dict[str, Any] = {
     "np": np,
     "db": mat.db,
@@ -21,19 +21,21 @@ SAFE_EVAL_CONTEXT: Dict[str, Any] = {
     "conj": mat.conjugate,
     "abs": abs,
     "round": round,
-    # We leave out s_to_z and z_to_s here—they will be re‑bound below.
+    # Note: We leave out s_to_z and z_to_s; they are provided per evaluation point.
 }
 
 def validate_expr(expr: str) -> bool:
     """
     Validate the expression using AST to ensure it contains only safe nodes.
+    (In production consider whitelisting a set of allowed node types for more security.)
     """
     try:
         node = ast.parse(expr, mode="eval")
         for subnode in ast.walk(node):
-            # For a more complete solution, whitelist allowed node types here.
+            # Reject any import-related nodes.
             if isinstance(subnode, (ast.Import, ast.ImportFrom)):
                 return False
+            # Optionally, add further checks against disallowed nodes (e.g. exec or other dynamic calls).
         return True
     except Exception:
         return False
@@ -51,10 +53,11 @@ def safe_eval_expr(expr: str,
                    ) -> Optional[Tuple[List[float], List[float]]]:
     """
     Safely evaluate a user-supplied expression using a restricted context.
-    Returns (x_data, y_data) if successful, or None on failure.
     
-    This version also re-binds the conversion functions (s_to_z, z_to_s) so that they
-    use the proper per-port impedance vector stored in simulation_results.stats.
+    Returns a tuple (x_data, y_data) if successful or None on failure.
+
+    This function builds a local evaluation dictionary for each simulation point so that
+    conversion functions (s_to_z, z_to_s) use the appropriate per-port impedance vector.
     """
     if not validate_expr(expr):
         if logger_func:
@@ -66,42 +69,48 @@ def safe_eval_expr(expr: str,
             logger_func("No simulation results available.")
         return None
 
-    # Retrieve the reference impedance vector from simulation results stats.
-    # If not found, fall back to a scalar default (50).
-    ref_impedance = simulation_results.stats.get("ref_impedance_vector", 50)
-    print(list(simulation_results.results.keys()))
-
-    # Build a safe globals dictionary. Here, we override our conversion functions
-    # using lambda wrappers that capture the 'ref_impedance' value.
-    safe_globals: Dict[str, Any] = {"__builtins__": {}}
-    safe_globals.update(SAFE_EVAL_CONTEXT)
-    safe_globals["s_to_z"] = lambda S: mat.s_to_z(S, Z0=ref_impedance)
-    safe_globals["z_to_s"] = lambda Z: mat.z_to_s(Z, Z0=ref_impedance)
-    # You may also add similar wrappers for s_to_y or y_to_s if needed.
-    
     x_data: List[float] = []
     y_data: List[float] = []
     
-    # Loop over each evaluated sweep point.
-    # simulation_results.results is expected to be a dict where keys are (freq, params) tuples.
-    for (freq, _), result in simulation_results.results.items:
-        s_matrix = result.results.items()
+    # Iterate over each evaluated sweep point.
+    # simulation_results.results is expected to be a dict with keys like (freq, params).
+    for (freq, _), result in simulation_results.results.items():
+        S = result.s_matrix
+        
+        # Get the per-point reference impedance vector from the result stats.
+        # If not found, fall back to a scalar default of 50.
+        Z0 = result.stats.get('ref_impedance_vector', 50)
+        
+        # Build a local evaluation context that includes dynamic variables and conversion wrappers.
+        local_context = {
+            "freq": freq,
+            "S": S,
+            "Z0": Z0,
+            # Provide a lambda that uses the per-point impedance vector.
+            "s_to_z": lambda S: mat.s_to_z(S, Z0=Z0),
+            "z_to_s": lambda Z: mat.z_to_s(Z, Z0=Z0)
+        }
+        #try:
+        #    # Convert the current s_matrix to an impedance matrix using the per-point conversion.
+        #    local_context["S"] = S
+        #except Exception as e:
+        #    if logger_func:
+        #        logger_func(f"Conversion to impedance failed at {freq:.3e} Hz: {e}")
+        #    return None
+        
         try:
-            # Using the overridden s_to_z conversion; now Z will be computed using the
-            # correct (per-port) impedance values.
-            print(s_matrix.stats)
-            Z = safe_globals["s_to_z"](s_matrix)
+            # Evaluate the user expression within the safe globals and the local context.
+            val = eval(expr, SAFE_EVAL_CONTEXT, local_context)
             if is_complex:
-                val = eval(expr, safe_globals, {"Z": Z, "freq": freq, "s_matrix": s_matrix})
+                # For complex expressions we return separate real and imaginary parts.
                 x_data.append(val.real)
                 y_data.append(val.imag)
             else:
-                y_val = eval(expr, safe_globals, {"Z": Z, "freq": freq, "s_matrix": s_matrix})
                 x_data.append(freq)
-                y_data.append(y_val)
+                y_data.append(val)
         except Exception as e:
-            error_type = "Complex eval" if is_complex else "Eval"
+            msg_type = "Complex eval" if is_complex else "Eval"
             if logger_func:
-                logger_func(f"{error_type} failed at {freq:.3e} Hz: {e}")
+                logger_func(f"{msg_type} failed at {freq:.3e} Hz: {e}")
             return None
     return x_data, y_data

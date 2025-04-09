@@ -7,11 +7,11 @@ external_ports:
   - name: p1
     impedance:
       type: fixed
-      value: "1"
+      value: "25"
   - name: p2
     impedance:
       type: fixed
-      value: "100"
+      value: "75"
 
 components:
   - id: C1

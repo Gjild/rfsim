@@ -52,8 +52,8 @@ def z_to_s(Z: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
         raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
 
     Z0_diag = np.diag(Z0_vec)
-    D = np.diag(np.sqrt(Z0_vec))
-    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+    D = np.diag(np.sqrt(np.real(Z0_vec)))
+    D_inv = np.diag(1.0/np.sqrt(np.real(Z0_vec)))
 
     M = Z + Z0_diag
     M_inv = robust_inv(M, reg=reg)
@@ -86,8 +86,8 @@ def s_to_z(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     if len(Z0_vec) != N:
         raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
 
-    D = np.diag(np.sqrt(Z0_vec))
-    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+    D = np.diag(np.sqrt(np.real(Z0_vec)))
+    D_inv = np.diag(1.0/np.sqrt(np.real(Z0_vec)))
     S_prime = D_inv @ S @ D
     I = np.eye(N, dtype=complex)
     inv_I_minus_S = robust_inv(I - S_prime, reg=reg)
@@ -120,13 +120,14 @@ def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
         Z0_vec = np.array(Z0)
     if len(Z0_vec) != N:
         raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
+    Z0_real = np.array([np.real(z) for z in Z0_vec])
 
     # Y0 is the diagonal matrix of the port admittances.
-    Y0 = np.diag(1.0 / Z0_vec)
+    Y0 = np.diag(1.0 / Z0_real)
     
     # Create scaling matrices for normalization.
-    D = np.diag(np.sqrt(Z0_vec))
-    D_inv = np.diag(1.0 / np.sqrt(Z0_vec))
+    D = np.diag(1.0/np.sqrt(Z0_real))
+    D_inv = np.diag(np.sqrt(Z0_real))
     
     # Form the sum Y0 + Y and regularize if needed.
     M = Y0 + Y
@@ -141,7 +142,7 @@ def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
         raise ValueError(f"Failed to invert (Y0+Y) matrix: {e}")
     
     # The proper conversion when Z0 is nonuniform:
-    S = D_inv @ ((Y0 - Y) @ M_inv) @ D
+    S = D @ ((Y0 - Y) @ M_inv) @ D_inv
     return S
 
 def s_to_y(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
@@ -171,8 +172,8 @@ def s_to_y(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     if len(Z0_vec) != N:
         raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
 
-    D = np.diag(np.sqrt(Z0_vec))
-    D_inv = np.diag(1.0/np.sqrt(Z0_vec))
+    D = np.diag(np.sqrt(np.real(Z0_vec)))
+    D_inv = np.diag(1.0/np.sqrt(np.real(Z0_vec)))
     S_prime = D_inv @ S @ D
     I = np.eye(N, dtype=complex)
     inv_I_plus_S = robust_inv(I + S_prime, reg=reg)
