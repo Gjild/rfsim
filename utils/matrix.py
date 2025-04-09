@@ -97,39 +97,19 @@ def s_to_z(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
 
 def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """
-    Convert an admittance matrix Y to a scattering matrix S for nonuniform port impedances.
-    
-    Parameters:
-      Y: np.ndarray
-         The NxN admittance matrix.
-      Z0: scalar or array-like
-         The reference impedance for each port. Can be a scalar (all ports identical)
-         or an array-like of length N.
-      reg: float
-         Regularization term for numerical stability.
-    
-    Returns:
-      S: np.ndarray
-         The resulting scattering matrix.
+    Convert admittance matrix Y to scattering matrix S with arbitrary complex Z0 per port.
     """
     N = Y.shape[0]
-    # Create the reference impedance vector.
-    if np.isscalar(Z0):
-        Z0_vec = np.array([Z0] * N)
-    else:
-        Z0_vec = np.array(Z0)
+    Z0_vec = np.full(N, Z0, dtype=np.complex128) if np.isscalar(Z0) else np.array(Z0, dtype=np.complex128)
     if len(Z0_vec) != N:
-        raise ValueError(f"Impedance vector length {len(Z0_vec)} does not match number of ports {N}.")
-    Z0_real = np.array([np.real(z) for z in Z0_vec])
+        raise ValueError("Z0 length mismatch.")
+    if np.any(np.real(Z0_vec) <= 0):
+        raise ValueError("Z0 must have positive real parts for power wave normalization.")
 
-    # Y0 is the diagonal matrix of the port admittances.
-    Y0 = np.diag(1.0 / Z0_real)
-    
-    # Create scaling matrices for normalization.
-    D = np.diag(1.0/np.sqrt(Z0_real))
-    D_inv = np.diag(np.sqrt(Z0_real))
-    
-    # Form the sum Y0 + Y and regularize if needed.
+    Y0 = np.diag(1.0 / Z0_vec)
+    D = np.diag(np.sqrt(np.real(Z0_vec)))
+    D_inv = np.diag(1.0/np.sqrt(np.real(Z0_vec)))
+
     M = Y0 + Y
     cond_M = np.linalg.cond(M)
     if cond_M > 1e6:
@@ -139,11 +119,11 @@ def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     try:
         M_inv = robust_inv(M, reg=reg)
     except Exception as e:
-        raise ValueError(f"Failed to invert (Y0+Y) matrix: {e}")
+        raise ValueError(f"Failed to invert (Y0+Y): {e}")
     
-    # The proper conversion when Z0 is nonuniform:
     S = D @ ((Y0 - Y) @ M_inv) @ D_inv
     return S
+
 
 def s_to_y(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     """

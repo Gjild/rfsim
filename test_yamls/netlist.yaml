@@ -1,4 +1,4 @@
-# test Netlist
+# Test Netlist
 
 parameters:
   scale: 1.0
@@ -7,7 +7,7 @@ external_ports:
   - name: p1
     impedance:
       type: fixed
-      value: "25"
+      value: "25+100j"
   - name: p2
     impedance:
       type: fixed
