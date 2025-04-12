@@ -129,7 +129,6 @@ class Evaluator:
 
             # Convert the effective Y matrix to an S-matrix using the vector of per-port impedances.
             from utils.matrix import y_to_s
-            print(ext_impedance_list)
             S = y_to_s(Y_eff, Z0=ext_impedance_list)
             port_order = ext_nodes
             stats = {"n_ports": len(port_order), "ref_impedance_vector": ext_impedance_list}

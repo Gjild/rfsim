@@ -8,8 +8,14 @@ def test_parse_netlist_valid(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - p1
-  - p2
+  - name: p1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: p2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor
@@ -26,7 +32,7 @@ connections:
     file.write_text(netlist_content)
     circuit = parse_netlist(str(file))
     assert len(circuit.components) == 1
-    assert circuit.external_ports == ["p1", "p2"]
+    assert sorted(circuit.external_ports.keys()) == ["p1", "p2"]
 
 def test_parse_sweep_config_valid(tmp_path):
     sweep_content = """
@@ -77,8 +83,14 @@ def test_parse_valid_netlist(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - p1
-  - p2
+  - name: p1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: p2
+    impedance:
+      type: fixed
+      value: "50" 
 components:
   - id: R1
     type: resistor
@@ -97,7 +109,7 @@ connections:
     # Parse netlist and verify that it produces a Circuit with one component and correct external ports.
     circuit = parse_netlist(str(netlist_file))
     assert len(circuit.components) == 1, "Expected one component in the parsed circuit"
-    assert circuit.external_ports == ["p1", "p2"], "External ports do not match the YAML configuration"
+    assert sorted(circuit.external_ports.keys()) == ["p1", "p2"], "External ports do not match the YAML configuration"
 
 def test_parse_netlist_missing_required_keys(tmp_path):
     """

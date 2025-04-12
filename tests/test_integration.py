@@ -15,8 +15,14 @@ def test_full_integration_yaml_roundtrip(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - p1
-  - p2
+  - name: p1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: p2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor
@@ -56,8 +62,8 @@ sweep:
     circuit.validate(verbose=False)
     result = sweep(circuit, sweep_config)
     assert result.results, "Expected sweep results."
-    for key, S in result.results.items():
-        assert S.shape == (2, 2)
+    for key, eval in result.results.items():
+        assert eval.s_matrix.shape == (2, 2)
 
     circuit_dict = to_yaml_dict(circuit)  # Use the serializer
     import yaml
@@ -70,8 +76,14 @@ def test_full_integration_with_multiple_sweep_params(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - n1
-  - n2
+  - name: n1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: n2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor
@@ -122,8 +134,14 @@ def test_yaml_roundtrip_integration(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - p1
-  - p2
+  - name: p1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: p2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor
@@ -169,8 +187,8 @@ sweep:
     
     # Ensure at least one sweep result is produced and it has the expected shape.
     assert result.results, "Expected at least one sweep result."
-    for key, S in result.results.items():
-        assert S.shape == (2, 2), f"Expected 2x2 S-matrix, got shape {S.shape}"
+    for key, eval in result.results.items():
+        assert eval.s_matrix.shape == (2, 2), f"Expected 2x2 S-matrix, got shape {eval.s_matrix.shape.shape}"
     
     # Test YAML serialization roundtrip.
     circuit_dict = to_yaml_dict(circuit)
@@ -212,8 +230,14 @@ def test_integration_multi_param_sweep(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - n1
-  - n2
+  - name: n1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: n2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor
@@ -260,8 +284,14 @@ def test_sweep_error_propagation(tmp_path):
 parameters:
   scale: 1.0
 external_ports:
-  - n1
-  - n2
+  - name: n1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: n2
+    impedance:
+      type: fixed
+      value: "50"
 components:
   - id: R1
     type: resistor

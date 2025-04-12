@@ -23,7 +23,7 @@ def robust_inv(matrix: np.ndarray, reg: float = 1e-9) -> np.ndarray:
         return np.linalg.pinv(matrix + reg * I)
     
 
-def z_to_s(Z: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
+def z_to_s(Z: np.ndarray, Z0=50, reg: float = 1e-9) -> np.ndarray:
     """
     Convert an impedance matrix Z to a scattering matrix S, handling nonuniform port impedances.
 
@@ -60,7 +60,7 @@ def z_to_s(Z: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     S = D_inv @ (Z - Z0_diag) @ M_inv @ D
     return S
 
-def s_to_z(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
+def s_to_z(S: np.ndarray, Z0=50, reg: float = 1e-9) -> np.ndarray:
     """
     Convert a scattering matrix S to an impedance matrix Z, handling nonuniform port impedances.
 
@@ -95,7 +95,7 @@ def s_to_z(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     Z = D @ ((I + S_prime) @ inv_I_minus_S) @ D
     return Z
 
-def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
+def y_to_s(Y: np.ndarray, Z0=50, reg: float = 1e-9) -> np.ndarray:
     """
     Convert admittance matrix Y to scattering matrix S with arbitrary complex Z0 per port.
     """
@@ -125,7 +125,7 @@ def y_to_s(Y: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
     return S
 
 
-def s_to_y(S: np.ndarray, Z0, reg: float = 1e-9) -> np.ndarray:
+def s_to_y(S: np.ndarray, Z0=50, reg: float = 1e-9) -> np.ndarray:
     """
     Convert a scattering matrix S to an admittance matrix Y, handling nonuniform port impedances.
 

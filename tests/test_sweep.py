@@ -12,8 +12,8 @@ def test_sweep_single_point(basic_circuit):
     }
     result = sweep(basic_circuit, config)
     assert result.results, "Expected at least one sweep result."
-    for key, S in result.results.items():
-        assert S.shape[0] == S.shape[1]
+    for key, eval in result.results.items():
+        assert eval.s_matrix.shape[0] == eval.s_matrix.shape[1]
 
 def test_sweep_multi_parameter(basic_circuit):
     from evaluation.sweep import sweep
