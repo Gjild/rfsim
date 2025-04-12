@@ -15,14 +15,20 @@ def perf_circuit():
     resistor = ResistorComponent("R1", {"R": "1000"})
     circuit.add_component(resistor)
     from core.topology.node import Node
+    from core.topology.port import Port  # Import Port for external ports
     # Connect resistor ports to two distinct nodes.
     node1 = Node("n1")
     node2 = Node("n2")
     resistor.ports[0].connected_node = node1
     resistor.ports[1].connected_node = node2
+    # Register nodes with the topology manager.
     circuit.topology_manager.nodes[node1.name] = node1
     circuit.topology_manager.nodes[node2.name] = node2
-    circuit.external_ports = ["n1", "n2"]
+    # Set external_ports as a dictionary mapping node names to Port objects.
+    circuit.external_ports = {
+        "n1": Port("n1", index=0, connected_node=node1, impedance=50),
+        "n2": Port("n2", index=0, connected_node=node2, impedance=50)
+    }
     return circuit
 
 def test_parallel_sweep_performance(perf_circuit):
@@ -66,8 +72,9 @@ def test_parallel_sweep_error_propagation(perf_circuit):
     # We expect at least one error among the sweep points.
     assert result.errors, "Expected at least one error to be recorded in sweep evaluation"
     # Verify that valid points still yield an S-matrix of the expected shape.
-    for key, S in result.results.items():
-        if S is not None:
+    for key, eval in result.results.items():
+        if eval is not None:
+            S = eval.s_matrix
             assert S.shape == (2, 2), f"Expected 2x2 S-matrix, got {S.shape}"
 
 def test_concurrency_stability(perf_circuit):
@@ -89,6 +96,6 @@ def test_concurrency_stability(perf_circuit):
     # Verify that each run produces 50 valid sweep results.
     for idx, result in enumerate(results):
         assert len(result.results) == 50, f"Run {idx}: Expected 50 results, got {len(result.results)}"
-        for key, S in result.results.items():
-            if S is not None:
-                assert S.shape == (2, 2), f"Run {idx}: Expected 2x2 S-matrix, got {S.shape}"
+        for key, eval in result.results.items():
+            if eval.s_matrix is not None:
+                assert eval.s_matrix.shape == (2, 2), f"Run {idx}: Expected 2x2 S-matrix, got {eval.s_matrix.shape}"

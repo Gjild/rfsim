@@ -188,7 +188,7 @@ sweep:
     # Ensure at least one sweep result is produced and it has the expected shape.
     assert result.results, "Expected at least one sweep result."
     for key, eval in result.results.items():
-        assert eval.s_matrix.shape == (2, 2), f"Expected 2x2 S-matrix, got shape {eval.s_matrix.shape.shape}"
+        assert eval.s_matrix.shape == (2, 2), f"Expected 2x2 S-matrix, got shape {eval.s_matrix.shape}"
     
     # Test YAML serialization roundtrip.
     circuit_dict = to_yaml_dict(circuit)

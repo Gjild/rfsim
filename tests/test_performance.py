@@ -11,13 +11,19 @@ def perf_circuit():
     resistor = ResistorComponent("R1", {"R": "1000"})
     circuit.add_component(resistor)
     from core.topology.node import Node
+    from core.topology.port import Port  # Import Port to build external port objects
     node1 = Node("n1")
     node2 = Node("n2")
     resistor.ports[0].connected_node = node1
     resistor.ports[1].connected_node = node2
+    # Register nodes in the topology manager.
     circuit.topology_manager.nodes["n1"] = node1
     circuit.topology_manager.nodes["n2"] = node2
-    circuit.external_ports = ["n1", "n2"]
+    # Set external_ports as a dictionary mapping node names to Port objects.
+    circuit.external_ports = {
+        "n1": Port("n1", index=0, connected_node=node1, impedance=50),
+        "n2": Port("n2", index=0, connected_node=node2, impedance=50)
+    }
     return circuit
 
 def test_sweep_performance(perf_circuit):
@@ -40,3 +46,4 @@ def test_sweep_benchmark(benchmark, perf_circuit):
         ]
     }
     benchmark(lambda: sweep(perf_circuit, config))
+
