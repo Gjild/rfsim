@@ -11,16 +11,13 @@ def to_yaml_dict(circuit) -> dict:
     Returns:
         A dictionary containing parameters, components, and connection definitions.
     """
-    comp_list = [comp.to_yaml_dict() for comp in circuit.components]
-    connections = []
-    for comp in circuit.components:
-        for port in comp.ports:
-            if port.connected_node:
-                connections.append({"port": f"{comp.id}.{port.name}", "node": port.connected_node.name})
     return {
         "parameters": circuit.parameters,
-        "components": comp_list,
-        "connections": connections
+        "components": [comp.to_yaml_dict() for comp in circuit.components],
+        "connections": [
+            {"port": f"{comp.id}.{port.name}", "node": port.connected_node.name}
+            for comp in circuit.components for port in comp.ports if port.connected_node
+        ],
     }
 
 def to_yaml_file(circuit, path: str) -> None:

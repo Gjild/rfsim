@@ -1,7 +1,6 @@
 # symbolic/evaluator.py
-from typing import Dict, Union
+from typing import Dict, Union, Any
 import sympy
-from typing import Dict
 from symbolic.expressions import compile_expr
 from symbolic.dependency_resolver import build_dependency_graph, topological_sort
 from symbolic.units import parse_quantity
@@ -16,33 +15,34 @@ def evaluate_parameter(expr: Union[str, sympy.Expr], resolved: Dict[str, float])
     :param expr: The parameter expression as a string or sympy.Expr.
     :param resolved: A dictionary of already resolved parameter values.
     :return: The evaluated parameter value as a float.
-    :raises Exception: If a symbol in the expression is not found in 'resolved'.
+    :raises KeyError: If a symbol in the expression is not found in 'resolved'.
     """
-    # If the expression is a string, try to parse it as a quantity first.
+    # Try parsing as a physical quantity if it's a string.
     if isinstance(expr, str):
         try:
             return parse_quantity(expr)
         except Exception:
-            pass  # Not a quantity; continue with symbolic evaluation.
+            pass  # Not a quantity; proceed with symbolic evaluation.
     
     sym_expr, func = compile_expr(expr)
     symbols = sorted(sym_expr.free_symbols, key=lambda s: str(s))
+    
+    # Gather evaluated values from the resolved dictionary; raise KeyError if missing.
     values = []
     for s in symbols:
         sname = str(s)
         if sname in resolved:
             values.append(resolved[sname])
         else:
-            raise Exception(f"Parameter '{sname}' not found in the resolved dictionary.")
+            raise KeyError(f"Parameter '{sname}' not found in the resolved dictionary.")
+    
     result = func(*values)
     try:
-        # Try to convert directly to float.
         return float(result)
     except Exception:
-        # If result is symbolic, evaluate numerically.
         return float(result.evalf())
 
-def resolve_all_parameters(param_dict: Dict[str, str]) -> Dict[str, float]:
+def resolve_all_parameters(param_dict: Dict[str, Union[str, sympy.Expr]]) -> Dict[str, float]:
     """
     Resolve all symbolic parameters considering dependencies.
     
@@ -52,7 +52,9 @@ def resolve_all_parameters(param_dict: Dict[str, str]) -> Dict[str, float]:
     """
     graph = build_dependency_graph(param_dict)
     sorted_keys = topological_sort(graph)
-    resolved = {}
+    resolved: Dict[str, float] = {}
+    
     for key in sorted_keys:
         resolved[key] = evaluate_parameter(param_dict[key], resolved)
+    
     return resolved

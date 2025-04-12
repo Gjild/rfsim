@@ -6,46 +6,55 @@ from symbolic.units import is_number
 
 def build_dependency_graph(param_dict: Dict[str, str]) -> Dict[str, Set[str]]:
     """
-    Build a dependency graph where each parameter maps to the set of parameters it depends on.
-    
-    :param param_dict: A dictionary mapping parameter names to their expressions.
+    Build a dependency graph mapping each parameter to the set of parameters
+    it depends on.
+
+    :param param_dict: Dictionary mapping parameter names to their expressions.
     :return: A dictionary representing the dependency graph.
     """
     token_pattern = re.compile(r'\b([a-zA-Z_]\w*)\b')
-    graph = {key: set() for key in param_dict}
-    for key, expr in param_dict.items():
-        if isinstance(expr, str):
-            tokens = token_pattern.findall(expr)
-            for token in tokens:
-                if token in param_dict and not is_number(token):
-                    graph[key].add(token)
-    return graph
+    # Use a dictionary comprehension to build the graph.
+    return {
+        key: (
+            {token for token in token_pattern.findall(expr)
+             if token in param_dict and not is_number(token)}
+            if isinstance(expr, str) else set()
+        )
+        for key, expr in param_dict.items()
+    }
 
 def topological_sort(graph: Dict[str, Set[str]]) -> List[str]:
     """
     Perform a topological sort on the dependency graph.
     
-    :param graph: The dependency graph.
-    :return: A list of parameter names sorted in dependency order.
+    :param graph: The dependency graph mapping parameter names to dependencies.
+    :return: A list of parameter names in a dependency-resolved order.
     :raises Exception: If a circular dependency is detected.
     """
-    sorted_keys = []
-    # Compute in-degrees.
-    in_degree = {key: 0 for key in graph}
-    for deps in graph.values():
+    # Initialize in-degree for each node and build a reverse dependency mapping.
+    in_degree = {node: 0 for node in graph}
+    reverse_map: Dict[str, Set[str]] = {node: set() for node in graph}
+    
+    for node, deps in graph.items():
         for dep in deps:
             in_degree[dep] += 1
+            reverse_map.setdefault(dep, set()).add(node)
+    
+    # Start with nodes having in-degree of zero.
+    queue = deque([node for node, degree in in_degree.items() if degree == 0])
+    sorted_nodes = []
 
-    queue = deque([k for k, deg in in_degree.items() if deg == 0])
     while queue:
         node = queue.popleft()
-        sorted_keys.append(node)
-        for key, deps in graph.items():
-            if node in deps:
-                deps.remove(node)
-                in_degree[key] -= 1
-                if in_degree[key] == 0:
-                    queue.append(key)
-    if len(sorted_keys) != len(graph):
+        sorted_nodes.append(node)
+        # For each node that depends on the current node,
+        # reduce its in-degree and add it to the queue if zero.
+        for dependent in reverse_map.get(node, []):
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+    
+    if len(sorted_nodes) != len(graph):
         raise Exception("Circular dependency detected in parameters!")
-    return sorted_keys
+    
+    return sorted_nodes

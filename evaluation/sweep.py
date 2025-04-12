@@ -7,63 +7,52 @@ from concurrent.futures import ProcessPoolExecutor
 from core.evaluation_types import EvaluationPoint
 from core.exceptions import ComponentEvaluationError
 
-# Top-level helper for evaluation.
 def _evaluate_point(circuit, freq, param_values, keys) -> EvaluationPoint:
-    local_params = {keys[i]: param_values[i] for i in range(len(keys))}
+    local_params = {k: param_values[i] for i, k in enumerate(keys)}
     try:
         res = circuit.evaluate(freq, local_params)
         return EvaluationPoint(
             frequency=freq,
             parameters=local_params,
-            s_matrix=res.s_matrix,  # You can still keep this for backward compatibility or convenience.
-            evaluation_result=res  # NEW: full evaluation context!
+            s_matrix=res.s_matrix,
+            evaluation_result=res  # full evaluation context!
         )
     except Exception as e:
         logging.error(f"Error at frequency {freq:.3e} Hz with parameters {local_params}: {e}")
         return EvaluationPoint(frequency=freq, parameters=local_params, error=str(e))
-    
 
 def evaluate_batch(circuit, batch_points, keys):
-    """
-    Evaluate a batch of sweep points.
-    """
-    batch_results = []
-    for freq, param_vals in batch_points:
-        point = _evaluate_point(circuit, freq, param_vals, keys)
-        batch_results.append(point)
-    return batch_results
-    
+    """Evaluate a batch of sweep points."""
+    return [_evaluate_point(circuit, freq, param_vals, keys) for freq, param_vals in batch_points]
+
 class SweepResult:
     def __init__(self, results, errors, stats=None):
         self.results = results
         self.errors = errors
-        self.stats = stats if stats is not None else {}
+        self.stats = stats or {}
 
     def to_dataframe(self):
         import pandas as pd
         rows = []
         for (freq, params_tuple), eval_result in self.results.items():
-            key_freq = round(freq, 9)
-            row = {"frequency": key_freq}
-            row.update(dict(params_tuple))
+            row = {"frequency": round(freq, 9), **dict(params_tuple)}
             if eval_result is not None:
-                row["s_matrix"] = eval_result.s_matrix
-                row["port_order"] = eval_result.port_order
-                row["node_mapping"] = eval_result.node_mapping
-                row["stats"] = eval_result.stats
+                row.update({
+                    "s_matrix": eval_result.s_matrix,
+                    "port_order": eval_result.port_order,
+                    "node_mapping": eval_result.node_mapping,
+                    "stats": eval_result.stats
+                })
             else:
-                row["s_matrix"] = None
-                row["port_order"] = None
-                row["node_mapping"] = None
-                row["stats"] = None
+                row.update({"s_matrix": None, "port_order": None, "node_mapping": None, "stats": None})
             rows.append(row)
         return pd.DataFrame(rows)
-
 
 def sweep(circuit, config):
     """
     Run the sweep simulation by evaluating batches of sweep points in parallel.
     """
+    # Parse sweep configuration.
     sweep_list = config.get("sweep", [])
     freq_sweep = None
     param_sweeps = {}
@@ -73,18 +62,14 @@ def sweep(circuit, config):
             start, end = map(float, s.get("range"))
             points = s.get("points")
             scale = s.get("scale", "linear")
-            if scale == "log":
-                freq_sweep = np.logspace(np.log10(start), np.log10(end), points)
-            else:
-                freq_sweep = np.linspace(start, end, points)
+            freq_sweep = np.logspace(np.log10(start), np.log10(end), points) if scale == "log" else np.linspace(start, end, points)
         else:
             param_sweeps[param] = s.get("values")
     keys = list(param_sweeps.keys())
     values_product = list(itertools.product(*param_sweeps.values())) if param_sweeps else [()]
     sweep_points = [(freq, param_vals) for freq in freq_sweep for param_vals in values_product]
 
-    results = {}
-    errors = []
+    results, errors = {}, []
     start_time = time.time()
 
     # Prepare a sanitized clone for parallel evaluation.
@@ -101,9 +86,9 @@ def sweep(circuit, config):
                 key = (round(point.frequency, 9), tuple(sorted(point.parameters.items())))
                 if point.error:
                     errors.append(f"Frequency {point.frequency:.3e} Hz, Params {point.parameters}: {point.error}")
-                    results[key] = None  # Alternatively, you could store the point with error details.
+                    results[key] = None
                 else:
-                    results[key] = point.evaluation_result  # Store the full evaluation result.
+                    results[key] = point.evaluation_result
 
     elapsed = time.time() - start_time
     stats = {"points": len(sweep_points), "elapsed": elapsed}
