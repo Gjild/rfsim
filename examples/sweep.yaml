@@ -1,0 +1,6 @@
+# Sweep frequency from 1 MHz to 1 GHz in 5 linearly spaced points
+sweep:
+  - param: f
+    range: [1e6, 1e9]
+    points: 1000
+    scale: linear

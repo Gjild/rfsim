@@ -1,4 +1,7 @@
 # core/exceptions.py
+"""
+Core exception definitions for RFSim v2.
+"""
 
 class RFSimError(Exception):
     """Base exception for RFSim errors."""
@@ -13,7 +16,7 @@ class TopologyError(RFSimError):
     pass
 
 class ComponentEvaluationError(RFSimError):
-    """Raised when a component fails during evaluation."""
+    """Raised when a component fails during Y/Z stamping or evaluation."""
     pass
 
 class SubcircuitMappingError(RFSimError):

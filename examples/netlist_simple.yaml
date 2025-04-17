@@ -1,0 +1,28 @@
+# examples/netlist.yaml
+parameters:
+  R: "1000"
+
+external_ports:
+  - name: in
+    net: p1
+    impedance:
+      type: fixed
+      value: "50"
+  - name: out
+    net: p2
+    impedance:
+      type: fixed
+      value: "50"
+
+components:
+  - id: R1
+    type: resistor
+    params:
+      R: "1000"
+    ports: ["1", "2"]
+
+connections:
+  - port: R1.1
+    net: p1
+  - port: R1.2
+    net: p2

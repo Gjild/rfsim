@@ -1,7 +1,0 @@
-sweep:
-  - param: f
-    range: [1e3, 1e10]
-    points: 10000
-    scale: linear
-  - param: scale
-    values: [1.0]

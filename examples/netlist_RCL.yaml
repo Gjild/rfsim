@@ -1,0 +1,55 @@
+version: 2.0
+
+parameters:
+  R: 1000
+
+external_ports:
+  - name: in
+    net: p1
+    impedance:
+      type: fixed
+      value: 50
+  - name: out
+    net: p2
+    impedance:
+      type: fixed
+      value: 50
+
+components:
+  - id: R1
+    type: resistor
+    params:
+      R: R
+    ports:
+      - "1"
+      - "2"
+
+  - id: C1
+    type: capacitor
+    params:
+      C: "1pF"
+    ports:
+      - "1"
+      - "2"
+
+  - id: L1
+    type: inductor
+    params:
+      L: "1nH"
+    ports:
+      - "1"
+      - "2"
+
+connections:
+  - port: R1.1
+    net: p1
+  - port: R1.2
+    net: p2
+  - port: C1.1
+    net: p1
+  - port: C1.2
+    net: p2
+  - port: L1.1
+    net: p1
+  - port: L1.2
+    net: p2
